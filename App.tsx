@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { RequestForm } from './components/RequestForm';
 import { EquipmentRequest, RequestStatus, ViewMode, OwnDetails, BuyDetails, UnidadOperativa, Categoria } from './types';
 import { AssignOwnModal } from './components/AssignOwnModal';
@@ -100,7 +100,6 @@ const App: React.FC = () => {
         if (sol.estado_general === 'PENDING') {
             flattened.push(baseRequest);
         } else {
-            // Procesar asignaciones
             sol.asignaciones.forEach((asig: any) => {
                 flattened.push({
                     ...baseRequest,
@@ -269,11 +268,18 @@ const App: React.FC = () => {
   };
 
   const initiateOwnAssignment = (req: EquipmentRequest) => { setSelectedRequestForOwn(req); setIsOwnModalOpen(true); };
+  
   const confirmOwnAssignment = async (detailsList: OwnDetails[]) => {
     if (!selectedRequestForOwn) return;
     
-    const count = detailsList.length;
-    const assignments = detailsList.map(detail => ({
+    // Validación de seguridad para asegurar que no se envíen asignaciones sin equipo
+    const validDetails = detailsList.filter(d => d.equipo_id);
+    if (validDetails.length !== detailsList.length) {
+        alert("Error: Algunos equipos no tienen un ID válido. Intente agregarlos nuevamente.");
+        return;
+    }
+
+    const assignments = validDetails.map(detail => ({
         solicitud_id: selectedRequestForOwn.id,
         tipo_gestion: 'OWN',
         equipo_id: detail.equipo_id,
@@ -283,11 +289,17 @@ const App: React.FC = () => {
     }));
 
     const { error } = await supabase.from('asignaciones').insert(assignments);
+    
     if (!error) {
+        // Mantenemos el estado PARTIAL para que quede en el Dashboard hasta confirmación final
         await supabase.from('solicitudes').update({ 
-            estado_general: count >= selectedRequestForOwn.quantity ? 'COMPLETED' : 'PARTIAL' 
+            estado_general: 'PARTIAL' 
         }).eq('id', selectedRequestForOwn.id);
+        
         await fetchRequests();
+    } else {
+        console.error(error);
+        alert("Error al asignar equipos: " + error.message);
     }
     setIsOwnModalOpen(false);
   };
@@ -416,6 +428,15 @@ const App: React.FC = () => {
   };
 
   const pendingList = getFilteredRequests(RequestStatus.PENDING);
+  
+  const groupedPending = useMemo(() => {
+    return pendingList.reduce((acc, req) => {
+        const uo = req.uo_nombre || 'Sin UO';
+        if (!acc[uo]) acc[uo] = [];
+        acc[uo].push(req);
+        return acc;
+    }, {} as Record<string, EquipmentRequest[]>);
+  }, [pendingList]);
 
   if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} validPassword={appPassword} />;
 
@@ -448,7 +469,7 @@ const App: React.FC = () => {
               <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-white p-6 rounded-lg shadow-sm border border-slate-200">
                 <div className="flex-1">
                   <h2 className="text-2xl font-bold text-slate-800">Panel de Control de Requerimientos</h2>
-                  <p className="text-slate-500 text-sm mt-1">Control centralizado de requerimientos y estados</p>
+                  <p className="text-slate-500 text-sm mt-1">Gestión centralizada de equipos y asignaciones</p>
                 </div>
                 
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
@@ -487,7 +508,7 @@ const App: React.FC = () => {
                   <table className="w-full text-sm text-left">
                     <thead className="text-[11px] text-slate-500 uppercase bg-slate-50 border-b">
                       <tr>
-                        <th className="px-4 py-3">UO / Descripción / Comentarios</th>
+                        <th className="px-4 py-3">Descripción / Comentarios</th>
                         <th className="px-4 py-3">Detalle</th>
                         <th className="px-4 py-3">Cant.</th>
                         <th className="px-4 py-3">Necesidad</th>
@@ -498,73 +519,81 @@ const App: React.FC = () => {
                       {pendingList.length === 0 ? (
                         <tr><td colSpan={5} className="text-center py-10 text-slate-400 italic">No hay solicitudes pendientes cargadas.</td></tr>
                       ) : (
-                        pendingList.map((req) => {
-                          const isEditing = editingPendingId === req.id;
-                          const isDeleting = deletingPendingId === req.id;
-                          return (
-                            <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${isEditing ? 'bg-blue-50/50' : ''}`}>
-                              <td className="px-4 py-3">
-                                <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">{req.uo_nombre}</div>
-                                {isEditing ? (
-                                  <div className="space-y-1">
-                                    <input type="text" placeholder="Descripción" className="border rounded p-1 text-xs w-full bg-white text-slate-900 border-slate-300" value={editPendingValues.description} onChange={(e) => setEditPendingValues({...editPendingValues, description: e.target.value})} />
-                                    <input type="text" placeholder="Comentarios" className="border rounded p-1 text-[10px] w-full bg-white text-slate-900 border-slate-300 italic" value={editPendingValues.comments} onChange={(e) => setEditPendingValues({...editPendingValues, comments: e.target.value})} />
-                                  </div>
-                                ) : (
-                                  <div>
-                                    <div className="font-medium text-slate-800">{req.description}</div>
-                                    {req.comments && <div className="text-[10px] text-slate-500 italic mt-0.5 border-t border-slate-100 pt-0.5 leading-tight">{req.comments}</div>}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="px-4 py-3 text-slate-600">
-                                {isEditing ? (
-                                    <input type="text" placeholder="Detalle" className="border rounded p-1 text-xs w-full bg-white text-slate-900 border-slate-300" value={editPendingValues.capacity} onChange={(e) => setEditPendingValues({...editPendingValues, capacity: e.target.value})} />
-                                ) : req.capacity}
-                              </td>
-                              <td className="px-4 py-3 font-semibold">
-                                {isEditing ? (
-                                    <input type="number" min="1" className="border rounded p-1 text-xs w-16 bg-white text-slate-900 border-slate-300" value={editPendingValues.quantity} onChange={(e) => setEditPendingValues({...editPendingValues, quantity: Number(e.target.value)})} />
-                                ) : req.quantity}
-                              </td>
-                              <td className="px-4 py-3 whitespace-nowrap text-red-600 font-medium">
-                                {isEditing ? (
-                                    <input type="date" className="border rounded p-1 text-xs bg-white text-slate-900 border-slate-300" value={editPendingValues.needDate} onChange={(e) => setEditPendingValues({...editPendingValues, needDate: e.target.value})} />
-                                ) : req.needDate}
-                              </td>
-                              <td className="px-4 py-3">
-                                <div className="flex justify-center gap-2 items-center">
-                                  {isDeleting ? (
-                                    <div className="flex flex-col items-center gap-1 animate-in zoom-in">
-                                      <span className="text-[10px] font-bold text-red-600 uppercase">¿Borrar?</span>
-                                      <div className="flex gap-2">
-                                        <button onClick={() => handleDeleteRequest(req.id)} className="bg-red-600 text-white p-1 rounded-md"><CheckCircle size={14}/></button>
-                                        <button onClick={() => setDeletingPendingId(null)} className="bg-slate-200 text-slate-600 p-1 rounded-md"><X size={14}/></button>
-                                      </div>
-                                    </div>
-                                  ) : isEditing ? (
-                                    <div className="flex gap-2">
-                                      <button onClick={() => saveEditingPending(req.id)} className="text-emerald-600 p-1.5 hover:bg-emerald-50 rounded-full" title="Guardar"><Save size={18}/></button>
-                                      <button onClick={cancelEditingPending} className="text-slate-400 p-1.5 hover:bg-slate-100 rounded-full" title="Cancelar"><X size={18}/></button>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <div className="flex gap-1 border-r pr-2 border-slate-200">
-                                        <button onClick={() => startEditingPending(req)} className="text-slate-400 hover:text-blue-600 p-1.5 rounded-full" title="Editar Solicitud"><Pencil size={18} /></button>
-                                        <button onClick={() => setDeletingPendingId(req.id)} className="text-slate-400 hover:text-red-600 p-1.5 rounded-full" title="Eliminar definitivamente"><Trash2 size={18} /></button>
-                                      </div>
-                                      <div className="flex gap-1 pl-1">
-                                        <Button size="sm" variant="success" onClick={() => initiateOwnAssignment(req)}>Propio</Button>
-                                        <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => initiateRentAssignment(req)}>Alquiler</Button>
-                                        <Button size="sm" variant="danger" onClick={() => updateStatusSimple(req.id, RequestStatus.BUY)}>Compra</Button>
-                                      </div>
-                                    </>
-                                  )}
-                                </div>
-                              </td>
-                            </tr>
-                          );
-                        })
+                        (Object.entries(groupedPending) as [string, EquipmentRequest[]][]).map(([uoName, items]) => (
+                            <React.Fragment key={uoName}>
+                                <tr className="bg-slate-100/80 border-y border-slate-200">
+                                    <td colSpan={5} className="px-4 py-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                        {uoName} ({items.length})
+                                    </td>
+                                </tr>
+                                {items.map((req) => {
+                                    const isEditing = editingPendingId === req.id;
+                                    const isDeleting = deletingPendingId === req.id;
+                                    return (
+                                        <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${isEditing ? 'bg-blue-50/50' : ''}`}>
+                                        <td className="px-4 py-3 pl-8">
+                                            {isEditing ? (
+                                            <div className="space-y-1">
+                                                <input type="text" placeholder="Descripción" className="border rounded p-1 text-xs w-full bg-white text-slate-900 border-slate-300 focus:ring-1 focus:ring-blue-500" value={editPendingValues.description} onChange={(e) => setEditPendingValues({...editPendingValues, description: e.target.value})} />
+                                                <input type="text" placeholder="Comentarios" className="border rounded p-1 text-[10px] w-full bg-white text-slate-900 border-slate-300 italic focus:ring-1 focus:ring-blue-500" value={editPendingValues.comments} onChange={(e) => setEditPendingValues({...editPendingValues, comments: e.target.value})} />
+                                            </div>
+                                            ) : (
+                                            <div>
+                                                <div className="font-medium text-slate-800">{req.description}</div>
+                                                {req.comments && <div className="text-[10px] text-slate-500 italic mt-0.5 border-t border-slate-100 pt-0.5 leading-tight">{req.comments}</div>}
+                                            </div>
+                                            )}
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-600">
+                                            {isEditing ? (
+                                                <input type="text" placeholder="Detalle (Ej: 20T)" className="border rounded p-1 text-xs w-full bg-white text-slate-900 border-slate-300" value={editPendingValues.capacity} onChange={(e) => setEditPendingValues({...editPendingValues, capacity: e.target.value})} />
+                                            ) : req.capacity}
+                                        </td>
+                                        <td className="px-4 py-3 font-semibold">
+                                            {isEditing ? (
+                                                <input type="number" min="1" className="border rounded p-1 text-xs w-16 bg-white text-slate-900 border-slate-300" value={editPendingValues.quantity} onChange={(e) => setEditPendingValues({...editPendingValues, quantity: Number(e.target.value)})} />
+                                            ) : req.quantity}
+                                        </td>
+                                        <td className="px-4 py-3 whitespace-nowrap text-red-600 font-medium">
+                                            {isEditing ? (
+                                                <input type="date" className="border rounded p-1 text-xs bg-white text-slate-900 border-slate-300" value={editPendingValues.needDate} onChange={(e) => setEditPendingValues({...editPendingValues, needDate: e.target.value})} />
+                                            ) : req.needDate}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex justify-center gap-2 items-center">
+                                            {isDeleting ? (
+                                                <div className="flex flex-col items-center gap-1 animate-in zoom-in">
+                                                <span className="text-[10px] font-bold text-red-600 uppercase">¿Borrar?</span>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => handleDeleteRequest(req.id)} className="bg-red-600 text-white p-1 rounded-md"><CheckCircle size={14}/></button>
+                                                    <button onClick={() => setDeletingPendingId(null)} className="bg-slate-200 text-slate-600 p-1 rounded-md"><X size={14}/></button>
+                                                </div>
+                                                </div>
+                                            ) : isEditing ? (
+                                                <div className="flex gap-2">
+                                                <button onClick={() => saveEditingPending(req.id)} className="text-emerald-600 p-1.5 hover:bg-emerald-50 rounded-full" title="Guardar"><Save size={18}/></button>
+                                                <button onClick={cancelEditingPending} className="text-slate-400 p-1.5 hover:bg-slate-100 rounded-full" title="Cancelar"><X size={18}/></button>
+                                                </div>
+                                            ) : (
+                                                <>
+                                                <div className="flex gap-1 border-r pr-2 border-slate-200">
+                                                    <button onClick={() => startEditingPending(req)} className="text-slate-400 hover:text-blue-600 p-1.5 rounded-full" title="Editar Solicitud"><Pencil size={18} /></button>
+                                                    <button onClick={() => setDeletingPendingId(req.id)} className="text-slate-400 hover:text-red-600 p-1.5 rounded-full" title="Eliminar definitivamente"><Trash2 size={18} /></button>
+                                                </div>
+                                                <div className="flex gap-1 pl-1">
+                                                    <Button size="sm" variant="success" onClick={() => initiateOwnAssignment(req)}>Propio</Button>
+                                                    <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => initiateRentAssignment(req)}>Alquiler</Button>
+                                                    <Button size="sm" variant="danger" onClick={() => updateStatusSimple(req.id, RequestStatus.BUY)}>Compra</Button>
+                                                </div>
+                                                </>
+                                            )}
+                                            </div>
+                                        </td>
+                                        </tr>
+                                    );
+                                })}
+                            </React.Fragment>
+                        ))
                       )}
                     </tbody>
                   </table>
@@ -583,6 +612,7 @@ const App: React.FC = () => {
                   onMarkCompleted={handleMarkAsCompleted} 
                   onUpdateRequest={handleUpdateRequest} 
                   onDeleteRequest={handleDeleteRequest} 
+                  onReturnToPending={handleRevertCompleted}
               />
 
               <ReportView 
@@ -597,6 +627,7 @@ const App: React.FC = () => {
                   onMarkCompleted={handleMarkAsCompleted} 
                   onUpdateRequest={handleUpdateRequest} 
                   onDeleteRequest={handleDeleteRequest} 
+                  onReturnToPending={handleRevertCompleted}
               />
 
               <ReportView 
@@ -611,6 +642,7 @@ const App: React.FC = () => {
                   onMarkCompleted={handleMarkAsCompleted} 
                   onUpdateRequest={handleUpdateRequest} 
                   onDeleteRequest={handleDeleteRequest} 
+                  onReturnToPending={handleRevertCompleted}
               />
 
             </div>
