@@ -1,3 +1,4 @@
+
 import React, { useMemo, useState } from 'react';
 import { EquipmentRequest, RequestStatus, Categoria, UnidadOperativa } from '../types';
 import { FileDown, MapPin, Undo2, CheckCircle, Archive, AlertTriangle, Pencil, Trash2, X, Save, Search, Filter, ClipboardCheck, Key, ShoppingCart, Calendar, RotateCcw } from 'lucide-react';
@@ -54,11 +55,14 @@ export const ReportView: React.FC<ReportViewProps> = ({
     const filtered = requests.filter(r => {
       if (r.status !== status) return false;
       
+      const term = searchTerm.toLowerCase();
       const matchesSearch = 
         searchTerm === '' || 
-        r.description.toLowerCase().includes(searchTerm.toLowerCase()) || 
-        r.ownDetails?.internalId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.uo_nombre?.toLowerCase().includes(searchTerm.toLowerCase());
+        (r.description || '').toLowerCase().includes(term) || 
+        (r.ownDetails?.internalId || '').toLowerCase().includes(term) ||
+        (r.buyDetails?.vendor || '').toLowerCase().includes(term) ||
+        (r.uo_nombre || '').toLowerCase().includes(term) ||
+        (r.comments || '').toLowerCase().includes(term);
       
       const matchesCategory = categoryFilter === '' || r.categoria_id === categoryFilter;
       const matchesUO = uoFilter === '' || r.uo_id === uoFilter;
@@ -79,11 +83,25 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const handleExportPDF = () => {
     const doc = new jsPDF();
     const dateStr = new Date().toLocaleDateString().replace(/\//g, '-');
+    
+    // Header
     doc.setFontSize(18);
     doc.text(`Reporte: ${title}`, 14, 20);
+    
     doc.setFontSize(10);
+    doc.setTextColor(100);
     doc.text(`Fecha de emisión: ${new Date().toLocaleDateString()}`, 14, 28);
-    let yPos = 35;
+
+    // Filter Info
+    let filterText = "Filtros aplicados: ";
+    const uoName = uoFilter ? uos.find(u => u.id === uoFilter)?.nombre : "Todos";
+    const catName = categoryFilter ? categories.find(c => c.id === categoryFilter)?.nombre : "Todas";
+    filterText += `UO: ${uoName} | Cat: ${catName}`;
+    if(searchTerm) filterText += ` | Busqueda: "${searchTerm}"`;
+    
+    doc.text(filterText, 14, 34);
+
+    let yPos = 40;
     (Object.entries(groupedData) as [string, EquipmentRequest[]][]).forEach(([uo, items]) => {
       doc.setFontSize(14);
       doc.setTextColor(40, 40, 40);
@@ -102,15 +120,16 @@ export const ReportView: React.FC<ReportViewProps> = ({
       
       const body = items.map(req => {
         if (isOwn && req.ownDetails) return [req.description, req.quantity.toString(), req.needDate, req.ownDetails.internalId, req.ownDetails.brand, req.ownDetails.model, req.ownDetails.availabilityDate];
-        else if (isRent) return [req.description, req.capacity, req.quantity.toString(), req.needDate, `${req.rentalDuration} meses`, req.comments];
+        else if (isRent) return [req.description, req.capacity, req.quantity.toString(), req.needDate, `${req.rentalDuration} meses`, req.comments || ''];
         else if (isBuy) return [req.description, req.buyDetails?.vendor || '-', req.buyDetails?.deliveryDate || '-', req.quantity.toString(), req.needDate, req.comments || ''];
         else if (isCompleted) {
             let origin = req.fulfillmentType === RequestStatus.OWN ? 'Propio' : (req.fulfillmentType === RequestStatus.RENT ? 'Alquiler' : 'Compra');
             let details = req.ownDetails ? `Int: ${req.ownDetails.internalId}` : (req.buyDetails ? `Prov: ${req.buyDetails.vendor}` : req.comments);
-            return [req.description, origin, details, req.quantity.toString(), new Date().toLocaleDateString()];
+            return [req.description, origin, details || '-', req.quantity.toString(), new Date().toLocaleDateString()];
         }
-        return [req.description, req.capacity, req.quantity.toString(), req.needDate, req.requestDate, req.comments];
+        return [req.description, req.capacity, req.quantity.toString(), req.needDate, req.requestDate, req.comments || ''];
       });
+      
       autoTable(doc, { startY: yPos, head: head, body: body, theme: 'striped', headStyles: { fillColor: isOwn ? [27, 77, 62] : (isBuy ? [220, 38, 38] : (isCompleted ? [71, 85, 105] : [217, 119, 6])) }, styles: { fontSize: 9 } });
       yPos = (doc as any).lastAutoTable.finalY + 15;
     });
