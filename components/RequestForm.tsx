@@ -1,15 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PlusCircle } from 'lucide-react';
 import { Button } from './Button';
-import { EquipmentRequest, RequestStatus, UnidadOperativa, Categoria } from '../types';
+import { EquipmentRequest, RequestStatus, UnidadOperativa, Categoria, UserRole } from '../types';
 
 interface RequestFormProps {
   onSubmit: (req: any) => void;
   uos: UnidadOperativa[];
   categories: Categoria[];
+  currentUser: { rol: UserRole; uo_id?: string } | null;
 }
 
-export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categories }) => {
+export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categories, currentUser }) => {
   const [formData, setFormData] = useState({
     uo_id: '',
     categoria_id: '',
@@ -20,6 +21,12 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
     comments: ''
   });
 
+  useEffect(() => {
+    if (currentUser?.rol === UserRole.USER && currentUser.uo_id) {
+      setFormData(prev => ({ ...prev, uo_id: currentUser.uo_id || '' }));
+    }
+  }, [currentUser]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const newRequestData = {
@@ -27,7 +34,15 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
       ...formData
     };
     onSubmit(newRequestData);
-    setFormData({ uo_id: '', categoria_id: '', description: '', capacity: '', quantity: 1, needDate: '', comments: '' });
+    setFormData({ 
+      uo_id: currentUser?.rol === UserRole.USER ? (currentUser.uo_id || '') : '', 
+      categoria_id: '', 
+      description: '', 
+      capacity: '', 
+      quantity: 1, 
+      needDate: '', 
+      comments: '' 
+    });
   };
 
   const inputClasses = "w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 border p-2 text-sm bg-white text-slate-900 placeholder:text-slate-400";
@@ -42,7 +57,13 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
       <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Unidad Operativa (UO)</label>
-          <select required className={inputClasses} value={formData.uo_id} onChange={(e) => setFormData({...formData, uo_id: e.target.value})}>
+          <select 
+            required 
+            disabled={currentUser?.rol === UserRole.USER}
+            className={`${inputClasses} ${currentUser?.rol === UserRole.USER ? 'bg-slate-100 cursor-not-allowed' : ''}`} 
+            value={formData.uo_id} 
+            onChange={(e) => setFormData({...formData, uo_id: e.target.value})}
+          >
             <option value="" disabled>Seleccione UO...</option>
             {uos.map((uo) => <option key={uo.id} value={uo.id}>{uo.nombre}</option>)}
           </select>

@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { RequestForm } from './components/RequestForm';
-import { EquipmentRequest, RequestStatus, ViewMode, OwnDetails, BuyDetails, UnidadOperativa, Categoria } from './types';
+import { EquipmentRequest, RequestStatus, ViewMode, OwnDetails, BuyDetails, UnidadOperativa, Categoria, UserRole } from './types';
 import { AssignOwnModal } from './components/AssignOwnModal';
 import { AssignRentModal } from './components/AssignRentModal';
 import { ReportView } from './components/ReportView';
@@ -17,7 +17,7 @@ const BRAND_GREEN = "bg-[#1B4D3E]";
 
 const App: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [appPassword, setAppPassword] = useState('asignacion2026');
+  const [currentUser, setCurrentUser] = useState<{ rol: UserRole; uo_id?: string; name: string } | null>(null);
   const [requests, setRequests] = useState<EquipmentRequest[]>([]);
   const [uos, setUos] = useState<UnidadOperativa[]>([]);
   const [categories, setCategories] = useState<Categoria[]>([]);
@@ -40,19 +40,20 @@ const App: React.FC = () => {
     fetchInitialData();
   }, []);
 
+  useEffect(() => {
+    if (isAuthenticated && currentUser) {
+      fetchRequests();
+    }
+  }, [isAuthenticated, currentUser]);
+
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
-        const { data: config } = await supabase.from('configuracion_sistema').select('*').eq('clave', 'app_password').single();
-        if (config) setAppPassword(config.valor);
-
         const { data: uoData } = await supabase.from('unidades_operativas').select('*').order('nombre');
         if (uoData) setUos(uoData || []);
 
         const { data: catData } = await supabase.from('categorias').select('*').order('nombre');
         if (catData) setCategories(catData || []);
-
-        await fetchRequests();
     } catch (e) {
         console.error("Error fetching initial data", e);
     } finally {
@@ -60,8 +61,10 @@ const App: React.FC = () => {
     }
   };
 
-  const fetchRequests = async () => {
-    const { data: solicitudes, error } = await supabase
+  const fetchRequests = async (userOverride?: { rol: UserRole; uo_id?: string }) => {
+    const user = userOverride || currentUser;
+    
+    let query = supabase
         .from('solicitudes')
         .select(`
             *,
@@ -73,6 +76,12 @@ const App: React.FC = () => {
             )
         `)
         .order('created_at', { ascending: false });
+
+    if (user?.rol === UserRole.USER && user.uo_id) {
+        query = query.eq('unidad_operativa_id', user.uo_id);
+    }
+
+    const { data: solicitudes, error } = await query;
 
     if (error) {
         console.error("Error fetching solicitudes", error);
@@ -138,8 +147,16 @@ const App: React.FC = () => {
     setRequests(flattened);
   };
 
-  const handleLogin = () => setIsAuthenticated(true);
-  const handleLogout = () => { setIsAuthenticated(false); setView('DASHBOARD'); };
+  const handleLogin = (user: { rol: UserRole; uo_id?: string; name: string }) => {
+    setCurrentUser(user);
+    setIsAuthenticated(true);
+    // The useEffect will trigger fetchRequests
+  };
+  const handleLogout = () => { 
+    setIsAuthenticated(false); 
+    setCurrentUser(null);
+    setView('DASHBOARD'); 
+  };
 
   const handleAddRequest = async (req: any) => {
     const { error } = await supabase.from('solicitudes').insert({
@@ -328,8 +345,7 @@ const App: React.FC = () => {
   };
 
   const handleUpdatePassword = async (newPass: string) => {
-      const { error } = await supabase.from('configuracion_sistema').upsert({ clave: 'app_password', valor: newPass });
-      if (!error) setAppPassword(newPass);
+      // This is now handled per user in the SettingsView
   };
 
   const getFilteredRequests = (status: RequestStatus) => {
@@ -340,7 +356,12 @@ const App: React.FC = () => {
                              r.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                              r.ownDetails?.internalId.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = categoryFilter === '' || r.categoria_id === categoryFilter;
-        const matchesUO = uoFilter === '' || r.uo_id === uoFilter;
+        
+        // Strict UO filtering for USER role
+        let matchesUO = uoFilter === '' || r.uo_id === uoFilter;
+        if (currentUser?.rol === UserRole.USER && currentUser.uo_id) {
+            matchesUO = r.uo_id === currentUser.uo_id;
+        }
 
         return matchesStatus && matchesSearch && matchesCategory && matchesUO;
     });
@@ -438,7 +459,7 @@ const App: React.FC = () => {
     }, {} as Record<string, EquipmentRequest[]>);
   }, [pendingList]);
 
-  if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} validPassword={appPassword} />;
+  if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} uos={uos} />;
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-100"><Loader2 className="animate-spin text-emerald-700" size={48} /></div>;
 
@@ -449,13 +470,21 @@ const App: React.FC = () => {
             <h1 className="text-7xl font-bold text-white tracking-tighter leading-none mb-2" style={{ fontFamily: '"Times New Roman", Times, serif' }}>GE<span className="text-6xl italic">y</span>T</h1>
             <h2 className="text-sm font-medium text-white/90 uppercase tracking-wide">Asignación de Equipos</h2>
         </div>
-        <nav className="flex-1 p-4 space-y-2 flex flex-col">
+          <nav className="flex-1 p-4 space-y-2 flex flex-col">
           <SidebarItem active={view === 'DASHBOARD'} onClick={() => setView('DASHBOARD')} icon={<LayoutDashboard size={20} />} label="Control de Requerimientos" />
           <div className="pt-6 pb-2 px-3 text-xs font-semibold uppercase text-white/50 tracking-wider">Historial</div>
           <SidebarItem active={view === 'COMPLETED'} onClick={() => setView('COMPLETED')} icon={<CheckSquare size={20} />} label="Completadas" />
           <div className="flex-1"></div>
           <div className="pt-4 border-t border-white/10 mt-2 space-y-2">
-            <SidebarItem active={view === 'SETTINGS'} onClick={() => setView('SETTINGS')} icon={<Settings size={20} />} label="Configuración" />
+            {currentUser && (
+              <div className="px-4 py-2 flex items-center gap-2 text-white/40 text-xs border-b border-white/5 mb-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                <span className="truncate max-w-[180px]">Usuario: <span className="text-white/80 font-semibold">{currentUser.name}</span></span>
+              </div>
+            )}
+            {currentUser?.rol === UserRole.ADMIN && (
+              <SidebarItem active={view === 'SETTINGS'} onClick={() => setView('SETTINGS')} icon={<Settings size={20} />} label="Configuración" />
+            )}
             <button onClick={handleLogout} className="w-full flex items-center gap-3 px-4 py-3 rounded-md transition-all text-white/60 hover:bg-[#113026] hover:text-white"><LogOut size={20} /><span className="font-medium">Salir</span></button>
           </div>
         </nav>
@@ -473,13 +502,15 @@ const App: React.FC = () => {
                 </div>
                 
                 <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
-                   <div className="relative w-full sm:w-44">
-                      <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                      <select className="pl-9 pr-4 py-2 border rounded-md text-sm w-full bg-white text-slate-900 border-slate-300 appearance-none" value={uoFilter} onChange={(e) => setUoFilter(e.target.value)}>
-                          <option value="">Todas las UO</option>
-                          {uos.map(uo => <option key={uo.id} value={uo.id}>{uo.nombre}</option>)}
-                      </select>
-                   </div>
+                   {currentUser?.rol === UserRole.ADMIN && (
+                     <div className="relative w-full sm:w-44">
+                        <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                        <select className="pl-9 pr-4 py-2 border rounded-md text-sm w-full bg-white text-slate-900 border-slate-300 appearance-none" value={uoFilter} onChange={(e) => setUoFilter(e.target.value)}>
+                            <option value="">Todas las UO</option>
+                            {uos.map(uo => <option key={uo.id} value={uo.id}>{uo.nombre}</option>)}
+                        </select>
+                     </div>
+                   )}
                    <div className="relative w-full sm:w-44">
                       <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                       <select className="pl-9 pr-4 py-2 border rounded-md text-sm w-full bg-white text-slate-900 border-slate-300 appearance-none" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
@@ -497,7 +528,7 @@ const App: React.FC = () => {
                 </div>
               </div>
 
-              <RequestForm onSubmit={handleAddRequest} uos={uos} categories={categories} />
+              <RequestForm onSubmit={handleAddRequest} uos={uos} categories={categories} currentUser={currentUser} />
               
               <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-4 border-b border-slate-200 bg-blue-50/50 flex items-center justify-between">
@@ -580,11 +611,13 @@ const App: React.FC = () => {
                                                     <button onClick={() => startEditingPending(req)} className="text-slate-400 hover:text-blue-600 p-1.5 rounded-full" title="Editar Solicitud"><Pencil size={18} /></button>
                                                     <button onClick={() => setDeletingPendingId(req.id)} className="text-slate-400 hover:text-red-600 p-1.5 rounded-full" title="Eliminar definitivamente"><Trash2 size={18} /></button>
                                                 </div>
-                                                <div className="flex gap-1 pl-1">
-                                                    <Button size="sm" variant="success" onClick={() => initiateOwnAssignment(req)}>Propio</Button>
-                                                    <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => initiateRentAssignment(req)}>Alquiler</Button>
-                                                    <Button size="sm" variant="danger" onClick={() => updateStatusSimple(req.id, RequestStatus.BUY)}>Compra</Button>
-                                                </div>
+                                                {currentUser?.rol === UserRole.ADMIN && (
+                                                  <div className="flex gap-1 pl-1">
+                                                      <Button size="sm" variant="success" onClick={() => initiateOwnAssignment(req)}>Propio</Button>
+                                                      <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => initiateRentAssignment(req)}>Alquiler</Button>
+                                                      <Button size="sm" variant="danger" onClick={() => updateStatusSimple(req.id, RequestStatus.BUY)}>Compra</Button>
+                                                  </div>
+                                                )}
                                                 </>
                                             )}
                                             </div>
@@ -609,6 +642,7 @@ const App: React.FC = () => {
                   categories={categories} 
                   uos={uos} 
                   globalFilters={{ searchTerm, categoryFilter, uoFilter }}
+                  currentUser={currentUser}
                   onMarkCompleted={handleMarkAsCompleted} 
                   onUpdateRequest={handleUpdateRequest} 
                   onDeleteRequest={handleDeleteRequest} 
@@ -624,6 +658,7 @@ const App: React.FC = () => {
                   categories={categories} 
                   uos={uos} 
                   globalFilters={{ searchTerm, categoryFilter, uoFilter }}
+                  currentUser={currentUser}
                   onMarkCompleted={handleMarkAsCompleted} 
                   onUpdateRequest={handleUpdateRequest} 
                   onDeleteRequest={handleDeleteRequest} 
@@ -639,6 +674,7 @@ const App: React.FC = () => {
                   categories={categories} 
                   uos={uos} 
                   globalFilters={{ searchTerm, categoryFilter, uoFilter }}
+                  currentUser={currentUser}
                   onMarkCompleted={handleMarkAsCompleted} 
                   onUpdateRequest={handleUpdateRequest} 
                   onDeleteRequest={handleDeleteRequest} 
@@ -655,13 +691,14 @@ const App: React.FC = () => {
                 requests={requests} 
                 categories={categories} 
                 uos={uos} 
+                currentUser={currentUser}
                 onReturnToPending={handleRevertCompleted}
             />
           )}
 
-          {view === 'SETTINGS' && (
+          {view === 'SETTINGS' && currentUser?.rol === UserRole.ADMIN && (
             <SettingsView 
-                uos={uos.map(u => u.nombre)} 
+                uos_list={uos} 
                 onAddUO={async n => { await supabase.from('unidades_operativas').insert({nombre: n}); fetchInitialData(); }} 
                 onDeleteUO={async n => { await supabase.from('unidades_operativas').delete().eq('nombre', n); fetchInitialData(); }} 
                 onEditUO={async (o, n) => { await supabase.from('unidades_operativas').update({nombre: n}).eq('nombre', o); fetchInitialData(); }} 
@@ -669,7 +706,6 @@ const App: React.FC = () => {
                 onAddCategory={async n => { await supabase.from('categorias').insert({nombre: n}); fetchInitialData(); }} 
                 onDeleteCategory={async n => { await supabase.from('categorias').delete().eq('nombre', n); fetchInitialData(); }} 
                 onEditCategory={async (o, n) => { await supabase.from('categorias').update({nombre: n}).eq('nombre', o); fetchInitialData(); }} 
-                onChangePassword={handleUpdatePassword} 
             />
           )}
         </div>

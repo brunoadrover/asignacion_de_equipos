@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from 'react';
-import { EquipmentRequest, RequestStatus, Categoria, UnidadOperativa } from '../types';
+import { EquipmentRequest, RequestStatus, Categoria, UnidadOperativa, UserRole } from '../types';
 import { FileDown, MapPin, Undo2, CheckCircle, Archive, AlertTriangle, Pencil, Trash2, X, Save, Search, Filter, ClipboardCheck, Key, ShoppingCart, Calendar, RotateCcw } from 'lucide-react';
 import { Button } from './Button';
 import { jsPDF } from 'jspdf';
@@ -19,6 +19,7 @@ interface ReportViewProps {
       categoryFilter: string;
       uoFilter: string;
   };
+  currentUser?: { rol: UserRole; uo_id?: string } | null;
   onReturnToPending?: (id: string) => void;
   onMarkCompleted?: (id: string) => void;
   onUpdateRequest?: (id: string, updates: Partial<EquipmentRequest>) => void;
@@ -34,6 +35,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
   hideHeader = false,
   compact = false,
   globalFilters,
+  currentUser,
   onReturnToPending,
   onMarkCompleted,
   onUpdateRequest,
@@ -65,7 +67,12 @@ export const ReportView: React.FC<ReportViewProps> = ({
         (r.comments || '').toLowerCase().includes(term);
       
       const matchesCategory = categoryFilter === '' || r.categoria_id === categoryFilter;
-      const matchesUO = uoFilter === '' || r.uo_id === uoFilter;
+      
+      // Strict UO filtering for USER role
+      let matchesUO = uoFilter === '' || r.uo_id === uoFilter;
+      if (currentUser?.rol === UserRole.USER && currentUser.uo_id) {
+          matchesUO = r.uo_id === currentUser.uo_id;
+      }
 
       return matchesSearch && matchesCategory && matchesUO;
     });
@@ -161,13 +168,15 @@ export const ReportView: React.FC<ReportViewProps> = ({
             </div>
             
             <div className="flex flex-col sm:flex-row items-center gap-3 w-full lg:w-auto">
-            <div className="relative w-full sm:w-48">
-                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                <select className="pl-9 pr-4 py-2 border rounded-md text-sm w-full bg-white text-slate-900 border-slate-300 appearance-none" value={localUo} onChange={(e) => setLocalUo(e.target.value)}>
-                    <option value="">Todas las UO</option>
-                    {uos.map(uo => <option key={uo.id} value={uo.id}>{uo.nombre}</option>)}
-                </select>
-            </div>
+            {currentUser?.rol === UserRole.ADMIN && (
+                <div className="relative w-full sm:w-48">
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                    <select className="pl-9 pr-4 py-2 border rounded-md text-sm w-full bg-white text-slate-900 border-slate-300 appearance-none" value={localUo} onChange={(e) => setLocalUo(e.target.value)}>
+                        <option value="">Todas las UO</option>
+                        {uos.map(uo => <option key={uo.id} value={uo.id}>{uo.nombre}</option>)}
+                    </select>
+                </div>
+            )}
             <div className="relative w-full sm:w-48">
                 <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
                 <select className="pl-9 pr-4 py-2 border rounded-md text-sm w-full bg-white text-slate-900 border-slate-300 appearance-none" value={localCategory} onChange={(e) => setLocalCategory(e.target.value)}>
@@ -217,7 +226,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   {status === RequestStatus.RENT && <><th className="px-6 py-3 bg-amber-50 text-amber-700">Plazo</th><th className="px-6 py-3">Comentarios</th></>}
                   {status === RequestStatus.BUY && <th className="px-6 py-3">Comentarios</th>}
                   {status === RequestStatus.COMPLETED && <th className="px-6 py-3">Detalle Cierre</th>}
-                  <th className="px-6 py-3 text-center">Acciones</th>
+                  {currentUser?.rol === UserRole.ADMIN && <th className="px-6 py-3 text-center">Acciones</th>}
                 </tr>
               </thead>
               <tbody>
@@ -268,46 +277,48 @@ export const ReportView: React.FC<ReportViewProps> = ({
                                         </td>
                                     )}
 
-                                    <td className="px-6 py-4">
-                                        {status === RequestStatus.COMPLETED ? (
-                                            <div className="flex justify-center">
-                                                <button 
-                                                    onClick={() => onReturnToPending?.(req.id)} 
-                                                    className="text-slate-400 hover:text-amber-600 p-1.5 hover:bg-amber-50 rounded-full transition-all flex items-center gap-1 group" 
-                                                    title="Revertir cierre y devolver a gestión original"
-                                                >
-                                                    <RotateCcw size={18} className="group-hover:rotate-[-45deg] transition-transform" />
-                                                    <span className="text-[10px] font-bold uppercase hidden group-hover:inline">Revertir</span>
-                                                </button>
-                                            </div>
-                                        ) : isDeleting ? (
-                                            <div className="flex flex-col items-center gap-1">
-                                            <span className="text-[10px] font-bold text-red-600 uppercase">¿Revertir?</span>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => confirmReturn(req.id)} className="bg-red-600 text-white p-1 rounded-md"><CheckCircle size={14} /></button>
-                                                <button onClick={() => setDeletingId(null)} className="bg-slate-200 text-slate-600 p-1 rounded-md"><X size={14} /></button>
-                                            </div>
-                                            </div>
-                                        ) : isEditing ? (
-                                            <div className="flex justify-center gap-2">
-                                            <button onClick={() => saveEditing(req.id)} className="text-emerald-600 p-1 hover:bg-emerald-100 rounded-full" title="Guardar"><Save size={18} /></button>
-                                            <button onClick={cancelEditing} className="text-slate-400 p-1 hover:bg-slate-200 rounded-full" title="Cancelar"><X size={18} /></button>
-                                            </div>
-                                        ) : (
-                                            <div className="flex justify-center gap-0.5">
-                                            <button onClick={() => startEditing(req)} className="text-slate-400 hover:text-emerald-600 p-1 hover:bg-emerald-50 rounded-full" title="Editar"><Pencil size={18} /></button>
-                                            <button 
-                                                onClick={() => onMarkCompleted?.(req.id)} 
-                                                className="text-emerald-500 hover:text-emerald-700 p-1 hover:bg-emerald-50 rounded-full transition-all" 
-                                                title="Marcar COMPLETADO"
-                                            >
-                                                <ClipboardCheck size={20} />
-                                            </button>
-                                            <button onClick={() => setDeletingId(req.id)} className="text-slate-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full" title="Borrar y volver a Pendiente"><Trash2 size={18} /></button>
-                                            <button onClick={() => onReturnToPending?.(req.id)} className="text-slate-400 hover:text-amber-600 p-1 hover:bg-amber-50 rounded-full" title="Devolver a pendientes"><Undo2 size={18} /></button>
-                                            </div>
-                                        )}
-                                    </td>
+                                    {currentUser?.rol === UserRole.ADMIN && (
+                                      <td className="px-6 py-4">
+                                          {status === RequestStatus.COMPLETED ? (
+                                              <div className="flex justify-center">
+                                                  <button 
+                                                      onClick={() => onReturnToPending?.(req.id)} 
+                                                      className="text-slate-400 hover:text-amber-600 p-1.5 hover:bg-amber-50 rounded-full transition-all flex items-center gap-1 group" 
+                                                      title="Revertir cierre y devolver a gestión original"
+                                                  >
+                                                      <RotateCcw size={18} className="group-hover:rotate-[-45deg] transition-transform" />
+                                                      <span className="text-[10px] font-bold uppercase hidden group-hover:inline">Revertir</span>
+                                                  </button>
+                                              </div>
+                                          ) : isDeleting ? (
+                                              <div className="flex flex-col items-center gap-1">
+                                              <span className="text-[10px] font-bold text-red-600 uppercase">¿Revertir?</span>
+                                              <div className="flex gap-2">
+                                                  <button onClick={() => confirmReturn(req.id)} className="bg-red-600 text-white p-1 rounded-md"><CheckCircle size={14} /></button>
+                                                  <button onClick={() => setDeletingId(null)} className="bg-slate-200 text-slate-600 p-1 rounded-md"><X size={14} /></button>
+                                              </div>
+                                              </div>
+                                          ) : isEditing ? (
+                                              <div className="flex justify-center gap-2">
+                                              <button onClick={() => saveEditing(req.id)} className="text-emerald-600 p-1 hover:bg-emerald-100 rounded-full" title="Guardar"><Save size={18} /></button>
+                                              <button onClick={cancelEditing} className="text-slate-400 p-1 hover:bg-slate-200 rounded-full" title="Cancelar"><X size={18} /></button>
+                                              </div>
+                                          ) : (
+                                              <div className="flex justify-center gap-0.5">
+                                              <button onClick={() => startEditing(req)} className="text-slate-400 hover:text-emerald-600 p-1 hover:bg-emerald-50 rounded-full" title="Editar"><Pencil size={18} /></button>
+                                              <button 
+                                                  onClick={() => onMarkCompleted?.(req.id)} 
+                                                  className="text-emerald-500 hover:text-emerald-700 p-1 hover:bg-emerald-50 rounded-full transition-all" 
+                                                  title="Marcar COMPLETADO"
+                                              >
+                                                  <ClipboardCheck size={20} />
+                                              </button>
+                                              <button onClick={() => setDeletingId(req.id)} className="text-slate-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full" title="Borrar y volver a Pendiente"><Trash2 size={18} /></button>
+                                              <button onClick={() => onReturnToPending?.(req.id)} className="text-slate-400 hover:text-amber-600 p-1 hover:bg-amber-50 rounded-full" title="Devolver a pendientes"><Undo2 size={18} /></button>
+                                              </div>
+                                          )}
+                                      </td>
+                                    )}
                                 </tr>
                             );
                         })}

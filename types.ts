@@ -57,3 +57,16 @@ export interface EquipmentRequest {
 }
 
 export type ViewMode = 'DASHBOARD' | 'COMPLETED' | 'SETTINGS';
+
+export enum UserRole {
+  ADMIN = 'ADMIN',
+  USER = 'USER'
+}
+
+export interface UserConfig {
+  clave: string;
+  valor: string;
+  usuario?: string;
+  rol: UserRole;
+  uidad_operativa_id?: string;
+}
