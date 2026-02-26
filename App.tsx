@@ -115,7 +115,7 @@ const App: React.FC = () => {
                     id: asig.id, 
                     solicitud_id: sol.id,
                     quantity: asig.cantidad_assigned || asig.cantidad_asignada,
-                    status: sol.estado_general === 'COMPLETED' ? RequestStatus.COMPLETED : (asig.tipo_gestion as RequestStatus),
+                    status: (sol.estado_general === 'COMPLETED' || asig.tipo_gestion === 'COMPLETED') ? RequestStatus.COMPLETED : (asig.tipo_gestion as RequestStatus),
                     rentalDuration: asig.alquiler_meses,
                     ownDetails: asig.equipo_id ? {
                         internalId: asig.equipos?.nro_interno || '',
@@ -336,10 +336,16 @@ const App: React.FC = () => {
 
       const { error } = await supabase.from('asignaciones').insert(assignments);
       if (!error) {
-          await supabase.from('solicitudes').update({ 
-              estado_general: count >= selectedRequestForRent.quantity ? 'COMPLETED' : 'PARTIAL' 
+          const totalAssigned = (await supabase.from('asignaciones').select('cantidad_asignada').eq('solicitud_id', selectedRequestForRent.id)).data?.reduce((sum, asig) => sum + asig.cantidad_asignada, 0) || 0;
+          const totalRequested = selectedRequestForRent.quantity;
+
+          await supabase.from('solicitudes').update({
+              estado_general: 'PARTIAL' 
           }).eq('id', selectedRequestForRent.id);
           await fetchRequests();
+      } else {
+          console.error("Error al asignar alquiler: ", error);
+          alert("Error al asignar equipos en alquiler: " + error.message);
       }
       setIsRentModalOpen(false);
   };
