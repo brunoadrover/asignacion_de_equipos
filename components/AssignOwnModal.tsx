@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 interface AssignOwnModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (detailsList: OwnDetails[]) => void;
+  onConfirm: (detailsList: OwnDetails[], comments: string) => void;
   request: EquipmentRequest | null;
 }
 
@@ -19,6 +19,7 @@ export const AssignOwnModal: React.FC<AssignOwnModalProps> = ({
   request 
 }) => {
   const [assignedItems, setAssignedItems] = useState<OwnDetails[]>([]);
+  const [comments, setComments] = useState('');
   
   // Estados para el flujo de carga
   const [internalIdInput, setInternalIdInput] = useState('');
@@ -40,8 +41,9 @@ export const AssignOwnModal: React.FC<AssignOwnModalProps> = ({
   });
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && request) {
         setAssignedItems([]);
+        setComments(request.comments || '');
         resetForm();
     }
   }, [isOpen, request]);
@@ -196,6 +198,17 @@ export const AssignOwnModal: React.FC<AssignOwnModalProps> = ({
               <span className="text-xs font-bold uppercase text-blue-600 block">Pendientes</span>
               <span className="text-2xl font-bold text-blue-800">{remainingQty}</span>
           </div>
+        </div>
+        
+        {/* Comments Section */}
+        <div className="px-6 pt-4">
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">Comentarios de la Solicitud</label>
+            <textarea 
+                className="w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 border p-2 text-sm bg-slate-50 text-slate-900 h-20"
+                placeholder="Agregue o edite comentarios..."
+                value={comments}
+                onChange={(e) => setComments(e.target.value)}
+            />
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6">
@@ -380,7 +393,7 @@ export const AssignOwnModal: React.FC<AssignOwnModalProps> = ({
                 type="button" 
                 variant="success" 
                 disabled={assignedItems.length === 0 || searchStatus === 'searching' || isSavingNew}
-                onClick={() => onConfirm(assignedItems)}
+                onClick={() => onConfirm(assignedItems, comments)}
             >
                 Confirmar Asignación ({assignedItems.length})
             </Button>

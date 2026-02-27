@@ -6,7 +6,7 @@ import { EquipmentRequest } from '../types';
 interface AssignRentModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (durations: number[]) => void;
+  onConfirm: (durations: number[], comments: string) => void;
   request: EquipmentRequest | null;
 }
 
@@ -18,12 +18,14 @@ export const AssignRentModal: React.FC<AssignRentModalProps> = ({
 }) => {
   const [durations, setDurations] = useState<number[]>([]);
   const [currentDuration, setCurrentDuration] = useState<number | ''>('');
+  const [comments, setComments] = useState('');
 
   // When modal opens, reset.
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && request) {
         setDurations([]);
         setCurrentDuration('');
+        setComments(request.comments || '');
     }
   }, [isOpen, request]);
 
@@ -58,7 +60,7 @@ export const AssignRentModal: React.FC<AssignRentModalProps> = ({
   };
 
   const handleFinalize = () => {
-    onConfirm(durations);
+    onConfirm(durations, comments);
   };
 
   return (
@@ -86,6 +88,17 @@ export const AssignRentModal: React.FC<AssignRentModalProps> = ({
               <span className="text-xs font-bold uppercase text-amber-600 block">Pendientes</span>
               <span className="text-xl font-bold text-amber-800">{remainingQty}</span>
           </div>
+        </div>
+        
+        {/* Comments Section */}
+        <div className="px-4 pt-4">
+            <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-1">Comentarios de la Solicitud</label>
+            <textarea 
+                className="w-full rounded-md border-slate-300 shadow-sm focus:border-amber-500 focus:ring-amber-500 border p-2 text-sm bg-slate-50 text-slate-900 h-20"
+                placeholder="Agregue o edite comentarios..."
+                value={comments}
+                onChange={(e) => setComments(e.target.value)}
+            />
         </div>
 
         <div className="p-4 space-y-4">

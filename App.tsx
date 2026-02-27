@@ -4,6 +4,7 @@ import { RequestForm } from './components/RequestForm';
 import { EquipmentRequest, RequestStatus, ViewMode, OwnDetails, BuyDetails, UnidadOperativa, Categoria, UserRole } from './types';
 import { AssignOwnModal } from './components/AssignOwnModal';
 import { AssignRentModal } from './components/AssignRentModal';
+import { AssignBuyModal } from './components/AssignBuyModal';
 import { ReportView } from './components/ReportView';
 import { SettingsView } from './components/SettingsView';
 import { LoginScreen } from './components/LoginScreen';
@@ -35,6 +36,8 @@ const App: React.FC = () => {
   const [selectedRequestForOwn, setSelectedRequestForOwn] = useState<EquipmentRequest | null>(null);
   const [isRentModalOpen, setIsRentModalOpen] = useState(false);
   const [selectedRequestForRent, setSelectedRequestForRent] = useState<EquipmentRequest | null>(null);
+  const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
+  const [selectedRequestForBuy, setSelectedRequestForBuy] = useState<EquipmentRequest | null>(null);
 
   useEffect(() => {
     fetchInitialData();
@@ -174,25 +177,6 @@ const App: React.FC = () => {
     if (!error) await fetchRequests();
   };
 
-  const updateStatusSimple = async (id: string, status: RequestStatus) => {
-      const req = requests.find(r => r.id === id);
-      if (!req) return;
-
-      if (status === RequestStatus.BUY) {
-          const { error: asigError } = await supabase.from('asignaciones').insert({
-            solicitud_id: req.id,
-            tipo_gestion: 'BUY',
-            cantidad_asignada: req.quantity,
-            fecha_gestion: new Date().toISOString()
-          });
-          
-          if (!asigError) {
-              await supabase.from('solicitudes').update({ estado_general: 'PARTIAL' }).eq('id', req.id);
-              await fetchRequests();
-          }
-      }
-  };
-
   const handleUpdateRequest = async (id: string, updates: Partial<EquipmentRequest>) => {
       const req = requests.find(r => r.id === id);
       if (!req) return;
@@ -287,7 +271,7 @@ const App: React.FC = () => {
 
   const initiateOwnAssignment = (req: EquipmentRequest) => { setSelectedRequestForOwn(req); setIsOwnModalOpen(true); };
   
-  const confirmOwnAssignment = async (detailsList: OwnDetails[]) => {
+  const confirmOwnAssignment = async (detailsList: OwnDetails[], comments: string) => {
     if (!selectedRequestForOwn) return;
     
     // Validación de seguridad para asegurar que no se envíen asignaciones sin equipo
@@ -309,9 +293,10 @@ const App: React.FC = () => {
     const { error } = await supabase.from('asignaciones').insert(assignments);
     
     if (!error) {
-        // Mantenemos el estado PARTIAL para que quede en el Dashboard hasta confirmación final
+        // Actualizamos los comentarios en la solicitud padre
         await supabase.from('solicitudes').update({ 
-            estado_general: 'PARTIAL' 
+            estado_general: 'PARTIAL',
+            comentarios: comments
         }).eq('id', selectedRequestForOwn.id);
         
         await fetchRequests();
@@ -323,10 +308,9 @@ const App: React.FC = () => {
   };
 
   const initiateRentAssignment = (req: EquipmentRequest) => { setSelectedRequestForRent(req); setIsRentModalOpen(true); };
-  const confirmRentAssignment = async (durations: number[]) => {
+  const confirmRentAssignment = async (durations: number[], comments: string) => {
       if (!selectedRequestForRent) return;
       
-      const count = durations.length;
       const assignments = durations.map(duration => ({
           solicitud_id: selectedRequestForRent.id,
           tipo_gestion: 'RENT',
@@ -337,11 +321,10 @@ const App: React.FC = () => {
 
       const { error } = await supabase.from('asignaciones').insert(assignments);
       if (!error) {
-          const totalAssigned = (await supabase.from('asignaciones').select('cantidad_asignada').eq('solicitud_id', selectedRequestForRent.id)).data?.reduce((sum, asig) => sum + asig.cantidad_asignada, 0) || 0;
-          const totalRequested = selectedRequestForRent.quantity;
-
+          // Actualizamos los comentarios en la solicitud padre
           await supabase.from('solicitudes').update({
-              estado_general: 'PARTIAL' 
+              estado_general: 'PARTIAL',
+              comentarios: comments
           }).eq('id', selectedRequestForRent.id);
           await fetchRequests();
       } else {
@@ -349,6 +332,30 @@ const App: React.FC = () => {
           alert("Error al asignar equipos en alquiler: " + error.message);
       }
       setIsRentModalOpen(false);
+  };
+
+  const initiateBuyAssignment = (req: EquipmentRequest) => { setSelectedRequestForBuy(req); setIsBuyModalOpen(true); };
+  const confirmBuyAssignment = async (comments: string) => {
+      if (!selectedRequestForBuy) return;
+
+      const { error: asigError } = await supabase.from('asignaciones').insert({
+        solicitud_id: selectedRequestForBuy.id,
+        tipo_gestion: 'BUY',
+        cantidad_asignada: selectedRequestForBuy.quantity,
+        fecha_gestion: new Date().toISOString()
+      });
+      
+      if (!asigError) {
+          await supabase.from('solicitudes').update({ 
+              estado_general: 'PARTIAL',
+              comentarios: comments
+          }).eq('id', selectedRequestForBuy.id);
+          await fetchRequests();
+      } else {
+          console.error("Error al iniciar compra: ", asigError);
+          alert("Error al iniciar gestión de compra: " + asigError.message);
+      }
+      setIsBuyModalOpen(false);
   };
 
   const handleUpdatePassword = async (newPass: string) => {
@@ -618,13 +625,13 @@ const App: React.FC = () => {
                                                     <button onClick={() => startEditingPending(req)} className="text-slate-400 hover:text-blue-600 p-1.5 rounded-full" title="Editar Solicitud"><Pencil size={18} /></button>
                                                     <button onClick={() => setDeletingPendingId(req.id)} className="text-slate-400 hover:text-red-600 p-1.5 rounded-full" title="Eliminar definitivamente"><Trash2 size={18} /></button>
                                                 </div>
-                                                {currentUser?.rol === UserRole.ADMIN && (
-                                                  <div className="flex gap-1 pl-1">
-                                                      <Button size="sm" variant="success" onClick={() => initiateOwnAssignment(req)}>Propio</Button>
-                                                      <Button size="sm" className="bg-amber-500 hover:bg-amber-600 text-white" onClick={() => initiateRentAssignment(req)}>Alquiler</Button>
-                                                      <Button size="sm" variant="danger" onClick={() => updateStatusSimple(req.id, RequestStatus.BUY)}>Compra</Button>
-                                                  </div>
-                                                )}
+                                                  {currentUser?.rol === UserRole.ADMIN && (
+                                                    <div className="flex gap-1 pl-1">
+                                                        <button onClick={() => initiateOwnAssignment(req)} className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-2 py-1 rounded transition-colors uppercase">Propio</button>
+                                                        <button onClick={() => initiateRentAssignment(req)} className="bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold px-2 py-1 rounded transition-colors uppercase">Alquiler</button>
+                                                        <button onClick={() => initiateBuyAssignment(req)} className="bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold px-2 py-1 rounded transition-colors uppercase">Compra</button>
+                                                    </div>
+                                                  )}
                                                 </>
                                             )}
                                             </div>
@@ -720,6 +727,7 @@ const App: React.FC = () => {
 
       <AssignOwnModal isOpen={isOwnModalOpen} onClose={() => setIsOwnModalOpen(false)} onConfirm={confirmOwnAssignment} request={selectedRequestForOwn} />
       <AssignRentModal isOpen={isRentModalOpen} onClose={() => setIsRentModalOpen(false)} onConfirm={confirmRentAssignment} request={selectedRequestForRent} />
+      <AssignBuyModal isOpen={isBuyModalOpen} onClose={() => setIsBuyModalOpen(false)} onConfirm={confirmBuyAssignment} request={selectedRequestForBuy} />
     </div>
   );
 };
