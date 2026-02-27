@@ -211,6 +211,7 @@ const App: React.FC = () => {
           const asigUpdates: any = {};
           if (updates.rentalDuration !== undefined) asigUpdates.alquiler_meses = updates.rentalDuration;
           if (updates.ownDetails?.availabilityDate !== undefined) asigUpdates.disponibilidad_obra = updates.ownDetails.availabilityDate;
+          if (updates.quantity !== undefined) asigUpdates.cantidad_asignada = updates.quantity;
           
           if (Object.keys(asigUpdates).length > 0) {
               await supabase.from('asignaciones').update(asigUpdates).eq('id', req.id);
