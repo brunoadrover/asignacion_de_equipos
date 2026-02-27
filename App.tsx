@@ -106,7 +106,8 @@ const App: React.FC = () => {
             quantity: sol.cantidad_total,
             needDate: sol.fecha_necesidad,
             comments: sol.comentarios,
-            status: sol.estado_general as RequestStatus
+            status: sol.estado_general as RequestStatus,
+            usagePeriod: sol.periodo_utilizacion
         };
 
         if (sol.estado_general === 'PENDING') {
@@ -171,7 +172,8 @@ const App: React.FC = () => {
         cantidad_total: req.quantity,
         fecha_necesidad: req.needDate,
         comentarios: req.comments,
-        estado_general: 'PENDING'
+        estado_general: 'PENDING',
+        periodo_utilizacion: req.usagePeriod
     });
 
     if (!error) await fetchRequests();
@@ -188,7 +190,8 @@ const App: React.FC = () => {
         capacidad: updates.capacity,
         cantidad_total: updates.quantity,
         fecha_necesidad: updates.needDate,
-        comentarios: updates.comments
+        comentarios: updates.comments,
+        periodo_utilizacion: updates.usagePeriod
       }).eq('id', solicitudId);
 
       if (req.status !== RequestStatus.PENDING && req.id !== solicitudId) {
@@ -430,17 +433,17 @@ const App: React.FC = () => {
             let body: string[][] = [];
 
             if (section.status === RequestStatus.PENDING) {
-                head = [['Descripción', 'Detalle', 'Cant', 'F. Nec.', 'Comentarios']];
-                body = items.map(r => [r.description, r.capacity, r.quantity.toString(), r.needDate, r.comments || '']);
+                head = [['Descripción', 'Detalle', 'Cant', 'F. Nec.', 'Periodo', 'Comentarios']];
+                body = items.map(r => [r.description, r.capacity, r.quantity.toString(), r.needDate, r.usagePeriod ? `${r.usagePeriod} m` : '-', r.comments || '']);
             } else if (section.status === RequestStatus.OWN) {
-                head = [['Descripción', 'Interno', 'Marca/Modelo', 'Cant', 'F. Disp.']];
-                body = items.map(r => [r.description, r.ownDetails?.internalId || '-', `${r.ownDetails?.brand} ${r.ownDetails?.model}`, r.quantity.toString(), r.ownDetails?.availabilityDate || '-']);
+                head = [['Descripción', 'Interno', 'Marca/Modelo', 'Cant', 'F. Disp.', 'Periodo']];
+                body = items.map(r => [r.description, r.ownDetails?.internalId || '-', `${r.ownDetails?.brand} ${r.ownDetails?.model}`, r.quantity.toString(), r.ownDetails?.availabilityDate || '-', r.usagePeriod ? `${r.usagePeriod} m` : '-']);
             } else if (section.status === RequestStatus.BUY) {
-                head = [['Descripción', 'Detalle', 'Cant', 'F. Nec.', 'Comentarios']];
-                body = items.map(r => [r.description, r.capacity, r.quantity.toString(), r.needDate, r.comments || '']);
+                head = [['Descripción', 'Detalle', 'Cant', 'F. Nec.', 'Periodo', 'Comentarios']];
+                body = items.map(r => [r.description, r.capacity, r.quantity.toString(), r.needDate, r.usagePeriod ? `${r.usagePeriod} m` : '-', r.comments || '']);
             } else {
-                head = [['Descripción', 'Detalle', 'Cant', 'F. Nec.', 'Plazo']];
-                body = items.map(r => [r.description, r.capacity, r.quantity.toString(), r.needDate, `${r.rentalDuration} meses`]);
+                head = [['Descripción', 'Detalle', 'Cant', 'F. Nec.', 'Periodo', 'Plazo']];
+                body = items.map(r => [r.description, r.capacity, r.quantity.toString(), r.needDate, r.usagePeriod ? `${r.usagePeriod} m` : '-', `${r.rentalDuration} meses`]);
             }
 
             autoTable(doc, {
@@ -557,17 +560,18 @@ const App: React.FC = () => {
                         <th className="px-4 py-3">Detalle</th>
                         <th className="px-4 py-3">Cant.</th>
                         <th className="px-4 py-3">Necesidad</th>
+                        <th className="px-4 py-3">Periodo</th>
                         <th className="px-4 py-3 text-center">Acciones</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {pendingList.length === 0 ? (
-                        <tr><td colSpan={5} className="text-center py-10 text-slate-400 italic">No hay solicitudes pendientes cargadas.</td></tr>
+                        <tr><td colSpan={6} className="text-center py-10 text-slate-400 italic">No hay solicitudes pendientes cargadas.</td></tr>
                       ) : (
                         (Object.entries(groupedPending) as [string, EquipmentRequest[]][]).map(([uoName, items]) => (
                             <React.Fragment key={uoName}>
                                 <tr className="bg-slate-100/80 border-y border-slate-200">
-                                    <td colSpan={5} className="px-4 py-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
+                                    <td colSpan={6} className="px-4 py-2 text-xs font-bold text-slate-700 uppercase tracking-wider">
                                         {uoName} ({items.length})
                                     </td>
                                 </tr>
@@ -603,6 +607,11 @@ const App: React.FC = () => {
                                             {isEditing ? (
                                                 <input type="date" className="border rounded p-1 text-xs bg-white text-slate-900 border-slate-300" value={editPendingValues.needDate} onChange={(e) => setEditPendingValues({...editPendingValues, needDate: e.target.value})} />
                                             ) : req.needDate}
+                                        </td>
+                                        <td className="px-4 py-3 text-slate-600">
+                                            {isEditing ? (
+                                                <input type="number" min="0.5" step="0.5" className="border rounded p-1 text-xs w-16 bg-white text-slate-900 border-slate-300" value={editPendingValues.usagePeriod || ''} onChange={(e) => setEditPendingValues({...editPendingValues, usagePeriod: e.target.value ? Number(e.target.value) : undefined})} />
+                                            ) : (req.usagePeriod ? `${req.usagePeriod} m` : '-')}
                                         </td>
                                         <td className="px-4 py-3">
                                             <div className="flex justify-center gap-2 items-center">

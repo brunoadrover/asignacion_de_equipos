@@ -45,6 +45,7 @@ export interface EquipmentRequest {
   needDate: string;
   comments: string;
   status: RequestStatus;
+  usagePeriod?: number;
   
   solicitud_id?: string;
   ownDetails?: OwnDetails;

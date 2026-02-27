@@ -119,22 +119,23 @@ export const ReportView: React.FC<ReportViewProps> = ({
       const isBuy = status === RequestStatus.BUY;
       const isCompleted = status === RequestStatus.COMPLETED;
       let head: string[][] = [];
-      if (isOwn) head = [['Descripción', 'Cant', 'Fecha Nec.', 'Interno', 'Marca', 'Modelo', 'Disp.']];
-      else if (isRent) head = [['Descripción', 'Capacidad', 'Cantidad', 'Fecha Nec.', 'Plazo', 'Comentarios']];
-      else if (isBuy) head = [['Descripción', 'Proveedor', 'Fecha Entrega', 'Cant', 'Fecha Nec.', 'Comentarios']];
-      else if (isCompleted) head = [['Descripción', 'Origen', 'Detalle', 'Cant', 'Fecha Cierre']];
-      else head = [['Descripción', 'Capacidad', 'Cantidad', 'Fecha Nec.', 'Solicitud', 'Comentarios']];
+      if (isOwn) head = [['Descripción', 'Cant', 'Fecha Nec.', 'Periodo', 'Interno', 'Marca', 'Modelo', 'Disp.']];
+      else if (isRent) head = [['Descripción', 'Capacidad', 'Cantidad', 'Fecha Nec.', 'Periodo', 'Plazo', 'Comentarios']];
+      else if (isBuy) head = [['Descripción', 'Proveedor', 'Fecha Entrega', 'Cant', 'Fecha Nec.', 'Periodo', 'Comentarios']];
+      else if (isCompleted) head = [['Descripción', 'Origen', 'Detalle', 'Cant', 'Fecha Cierre', 'Periodo']];
+      else head = [['Descripción', 'Capacidad', 'Cantidad', 'Fecha Nec.', 'Periodo', 'Solicitud', 'Comentarios']];
       
       const body = items.map(req => {
-        if (isOwn && req.ownDetails) return [req.description, req.quantity.toString(), req.needDate, req.ownDetails.internalId, req.ownDetails.brand, req.ownDetails.model, req.ownDetails.availabilityDate];
-        else if (isRent) return [req.description, req.capacity, req.quantity.toString(), req.needDate, `${req.rentalDuration} meses`, req.comments || ''];
-        else if (isBuy) return [req.description, req.buyDetails?.vendor || '-', req.buyDetails?.deliveryDate || '-', req.quantity.toString(), req.needDate, req.comments || ''];
+        const period = req.usagePeriod ? `${req.usagePeriod} m` : '-';
+        if (isOwn && req.ownDetails) return [req.description, req.quantity.toString(), req.needDate, period, req.ownDetails.internalId, req.ownDetails.brand, req.ownDetails.model, req.ownDetails.availabilityDate];
+        else if (isRent) return [req.description, req.capacity, req.quantity.toString(), req.needDate, period, `${req.rentalDuration} meses`, req.comments || ''];
+        else if (isBuy) return [req.description, req.buyDetails?.vendor || '-', req.buyDetails?.deliveryDate || '-', req.quantity.toString(), req.needDate, period, req.comments || ''];
         else if (isCompleted) {
             let origin = req.fulfillmentType === RequestStatus.OWN ? 'Propio' : (req.fulfillmentType === RequestStatus.RENT ? 'Alquiler' : 'Compra');
             let details = req.ownDetails ? `Int: ${req.ownDetails.internalId}` : (req.buyDetails ? `Prov: ${req.buyDetails.vendor}` : req.comments);
-            return [req.description, origin, details || '-', req.quantity.toString(), new Date().toLocaleDateString()];
+            return [req.description, origin, details || '-', req.quantity.toString(), new Date().toLocaleDateString(), period];
         }
-        return [req.description, req.capacity, req.quantity.toString(), req.needDate, req.requestDate, req.comments || ''];
+        return [req.description, req.capacity, req.quantity.toString(), req.needDate, period, req.requestDate, req.comments || ''];
       });
       
       autoTable(doc, { startY: yPos, head: head, body: body, theme: 'striped', headStyles: { fillColor: isOwn ? [27, 77, 62] : (isBuy ? [220, 38, 38] : (isCompleted ? [71, 85, 105] : [217, 119, 6])) }, styles: { fontSize: 9 } });
@@ -222,6 +223,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   <th className="px-6 py-3">{status === RequestStatus.COMPLETED ? 'Gestión' : 'Detalle'}</th>
                   <th className="px-6 py-3">Cant.</th>
                   <th className="px-6 py-3">F. Nec.</th>
+                  <th className="px-6 py-3">Periodo</th>
                   {status === RequestStatus.OWN && <><th className="px-6 py-3 bg-emerald-50 text-emerald-700">Interno</th><th className="px-6 py-3 bg-emerald-50 text-emerald-700">Marca/Modelo</th><th className="px-6 py-3 bg-emerald-50 text-emerald-700">Disp.</th></>}
                   {status === RequestStatus.RENT && <><th className="px-6 py-3 bg-amber-50 text-amber-700">Plazo</th><th className="px-6 py-3">Comentarios</th></>}
                   {status === RequestStatus.BUY && <th className="px-6 py-3">Comentarios</th>}
@@ -255,6 +257,11 @@ export const ReportView: React.FC<ReportViewProps> = ({
                                     </td>
                                     <td className="px-6 py-4 font-semibold">{isEditing ? <input type="number" className={inputClasses + " w-16"} value={editValues.quantity} onChange={e => setEditValues({...editValues, quantity: parseInt(e.target.value)})}/> : req.quantity}</td>
                                     <td className="px-6 py-4 whitespace-nowrap">{isEditing ? <input type="date" className={inputClasses} value={editValues.needDate} onChange={e => setEditValues({...editValues, needDate: e.target.value})}/> : req.needDate}</td>
+                                    <td className="px-6 py-4 text-slate-600">
+                                        {isEditing ? (
+                                            <input type="number" min="0.5" step="0.5" className={inputClasses + " w-16"} value={editValues.usagePeriod || ''} onChange={e => setEditValues({...editValues, usagePeriod: e.target.value ? parseFloat(e.target.value) : undefined})}/>
+                                        ) : (req.usagePeriod ? `${req.usagePeriod} m` : '-')}
+                                    </td>
                                     
                                     {status === RequestStatus.OWN && <>
                                         <td className="px-6 py-4 font-mono text-emerald-700 font-bold">{req.ownDetails?.internalId}</td>

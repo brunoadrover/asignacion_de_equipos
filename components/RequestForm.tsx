@@ -17,6 +17,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
     description: '',
     capacity: '',
     quantity: 1,
+    usagePeriod: '' as number | '',
     needDate: '',
     comments: ''
   });
@@ -40,6 +41,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
       description: '', 
       capacity: '', 
       quantity: 1, 
+      usagePeriod: '' as number | '',
       needDate: '', 
       comments: '' 
     });
@@ -87,18 +89,22 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
           <input type="text" placeholder="Ej: Doble Cabina / 20T" className={inputClasses} value={formData.capacity} onChange={(e) => setFormData({...formData, capacity: e.target.value})} />
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Cantidad</label>
-                <input required type="number" min="1" className={inputClasses} value={formData.quantity} onChange={(e) => setFormData({...formData, quantity: Number(e.target.value)})} />
-            </div>
-            <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Necesidad</label>
-                <input required type="date" className={inputClasses} value={formData.needDate} onChange={(e) => setFormData({...formData, needDate: e.target.value})} />
-            </div>
+        <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Cantidad</label>
+            <input required type="number" min="1" className={inputClasses} value={formData.quantity} onChange={(e) => setFormData({...formData, quantity: Number(e.target.value)})} />
         </div>
 
-        <div className="lg:col-span-2">
+        <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Necesidad</label>
+            <input required type="date" className={inputClasses} value={formData.needDate} onChange={(e) => setFormData({...formData, needDate: e.target.value})} />
+        </div>
+
+        <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Periodo (Meses)</label>
+            <input type="number" min="0.5" step="0.5" placeholder="Ej: 6" className={inputClasses} value={formData.usagePeriod} onChange={(e) => setFormData({...formData, usagePeriod: e.target.value ? Number(e.target.value) : ''})} />
+        </div>
+
+        <div className="lg:col-span-4">
           <label className="block text-sm font-medium text-slate-700 mb-1">Comentarios</label>
           <input type="text" placeholder="Detalles adicionales..." className={inputClasses} value={formData.comments} onChange={(e) => setFormData({...formData, comments: e.target.value})} />
         </div>
