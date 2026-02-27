@@ -237,11 +237,17 @@ export const ReportView: React.FC<ReportViewProps> = ({
                         {items.map((req, idx) => {
                             const isEditing = editingId === req.id;
                             const isDeleting = deletingId === req.id;
+                            const isDelayed = status === RequestStatus.OWN && req.ownDetails?.availabilityDate && req.needDate && req.ownDetails.availabilityDate > req.needDate;
+
                             return (
-                                <tr key={req.id} className={`border-b hover:bg-slate-50 transition-colors ${isEditing ? 'bg-emerald-50/30' : ''}`}>
+                                <React.Fragment key={req.id}>
+                                <tr className={`border-b hover:bg-slate-50 transition-colors ${isEditing ? 'bg-emerald-50/30' : ''} ${isDelayed ? 'bg-red-50/30' : ''}`}>
                                     <td className="px-6 py-4">
                                         <div className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-0.5">{uo}</div>
-                                        <div className="font-medium text-slate-900">{req.description}</div>
+                                        <div className="font-medium text-slate-900 flex items-center gap-2">
+                                            {req.description}
+                                            {isDelayed && <AlertTriangle size={14} className="text-red-500 animate-pulse" />}
+                                        </div>
                                         <div className="text-[10px] text-slate-400 font-normal uppercase">{req.categoria_nombre}</div>
                                     </td>
                                     <td className="px-6 py-4">
@@ -327,6 +333,20 @@ export const ReportView: React.FC<ReportViewProps> = ({
                                       </td>
                                     )}
                                 </tr>
+                                {isDelayed && (
+                                    <tr className="bg-red-50/50">
+                                        <td colSpan={10} className="px-6 py-2">
+                                            <div className="flex items-center gap-2 text-[11px] text-red-700 font-medium">
+                                                <AlertTriangle size={14} className="flex-shrink-0" />
+                                                <span>
+                                                    ADVERTENCIA: La disponibilidad ({req.ownDetails?.availabilityDate}) es posterior a la necesidad ({req.needDate}). 
+                                                    Se sugiere <span className="font-bold">alquiler por la diferencia</span> o <span className="font-bold">renegociar la fecha</span> con la obra.
+                                                </span>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                )}
+                                </React.Fragment>
                             );
                         })}
                     </React.Fragment>
