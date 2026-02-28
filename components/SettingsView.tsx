@@ -57,9 +57,138 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="mt-8 pt-8 border-t border-slate-200">
              <UserManager uos={uos_list} />
         </div>
+
+        {/* Notification Settings Section */}
+        <div className="mt-8 pt-8 border-t border-slate-200">
+             <NotificationManager uos={uos_list} />
+        </div>
       </div>
     </div>
   );
+};
+
+// Notification Manager Component
+const NotificationManager: React.FC<{ uos: UnidadOperativa[] }> = ({ uos }) => {
+    const [configs, setConfigs] = useState<UserConfig[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [editingUoId, setEditingUoId] = useState<string | null>(null);
+    const [editValues, setEditValues] = useState<Partial<UserConfig>>({});
+
+    useEffect(() => {
+        fetchConfigs();
+    }, []);
+
+    const fetchConfigs = async () => {
+        setIsLoading(true);
+        const { data, error } = await supabase
+            .from('configuracion_sistema')
+            .select('*')
+            .eq('rol', 'NOTIFICATION_CONFIG');
+        if (!error && data) {
+            setConfigs(data);
+        }
+        setIsLoading(false);
+    };
+
+    const handleSave = async (uoId: string) => {
+        const clave = `NOTIF_UO_${uoId}`;
+        const payload = {
+            clave,
+            valor: 'CONFIG',
+            rol: 'NOTIFICATION_CONFIG',
+            uidad_operativa_id: uoId,
+            correo1: editValues.correo1 || '',
+            correo2: editValues.correo2 || '',
+            correo3: editValues.correo3 || '',
+            correo4: editValues.correo4 || ''
+        };
+
+        const { error } = await supabase.from('configuracion_sistema').upsert(payload);
+        if (!error) {
+            fetchConfigs();
+            setEditingUoId(null);
+        } else {
+            alert("Error al guardar configuración: " + error.message);
+        }
+    };
+
+    const startEditing = (uoId: string) => {
+        const existing = configs.find(c => c.uidad_operativa_id === uoId);
+        setEditingUoId(uoId);
+        setEditValues(existing || { correo1: '', correo2: '', correo3: '', correo4: '' });
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center gap-3">
+                <div className="p-2 bg-slate-100 rounded-lg text-slate-700">
+                    <Users size={24} />
+                </div>
+                <div>
+                    <h3 className="text-lg font-semibold text-slate-800">Notificaciones por UO</h3>
+                    <p className="text-sm text-slate-500">Configure los destinatarios de correo para cada Unidad Operativa</p>
+                    <p className="text-[10px] text-amber-600 mt-1 font-medium">Nota: Si usa Resend en modo prueba, solo podrá enviar correos a la dirección registrada en su cuenta.</p>
+                </div>
+            </div>
+
+            <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-slate-50 text-slate-500 uppercase text-[10px] font-bold border-b">
+                        <tr>
+                            <th className="px-4 py-3">Unidad Operativa</th>
+                            <th className="px-4 py-3">Correo 1</th>
+                            <th className="px-4 py-3">Correo 2</th>
+                            <th className="px-4 py-3">Correo 3</th>
+                            <th className="px-4 py-3">Correo 4</th>
+                            <th className="px-4 py-3 text-right">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {uos.map(uo => {
+                            const config = configs.find(c => c.uidad_operativa_id === uo.id);
+                            const isEditing = editingUoId === uo.id;
+
+                            return (
+                                <tr key={uo.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="px-4 py-3 font-medium text-slate-700">{uo.nombre}</td>
+                                    <td className="px-4 py-3">
+                                        {isEditing ? (
+                                            <input type="email" className="w-full p-1 border rounded text-xs" value={editValues.correo1 || ''} onChange={e => setEditValues({...editValues, correo1: e.target.value})} />
+                                        ) : (config?.correo1 || '-')}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        {isEditing ? (
+                                            <input type="email" className="w-full p-1 border rounded text-xs" value={editValues.correo2 || ''} onChange={e => setEditValues({...editValues, correo2: e.target.value})} />
+                                        ) : (config?.correo2 || '-')}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        {isEditing ? (
+                                            <input type="email" className="w-full p-1 border rounded text-xs" value={editValues.correo3 || ''} onChange={e => setEditValues({...editValues, correo3: e.target.value})} />
+                                        ) : (config?.correo3 || '-')}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                        {isEditing ? (
+                                            <input type="email" className="w-full p-1 border rounded text-xs" value={editValues.correo4 || ''} onChange={e => setEditValues({...editValues, correo4: e.target.value})} />
+                                        ) : (config?.correo4 || '-')}
+                                    </td>
+                                    <td className="px-4 py-3 text-right">
+                                        {isEditing ? (
+                                            <div className="flex justify-end gap-1">
+                                                <button onClick={() => handleSave(uo.id)} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded"><Save size={16} /></button>
+                                                <button onClick={() => setEditingUoId(null)} className="p-1 text-slate-400 hover:bg-slate-100 rounded"><X size={16} /></button>
+                                            </div>
+                                        ) : (
+                                            <button onClick={() => startEditing(uo.id)} className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"><Pencil size={16} /></button>
+                                        )}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
 };
 
 // User Manager Component
@@ -78,7 +207,10 @@ const UserManager: React.FC<{ uos: UnidadOperativa[] }> = ({ uos }) => {
 
     const fetchUsers = async () => {
         setIsLoading(true);
-        const { data, error } = await supabase.from('configuracion_sistema').select('*');
+        const { data, error } = await supabase
+            .from('configuracion_sistema')
+            .select('*')
+            .in('rol', [UserRole.ADMIN, UserRole.USER]);
         if (!error && data) {
             setUsers(data);
         }

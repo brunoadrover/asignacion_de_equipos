@@ -68,6 +68,10 @@ export interface UserConfig {
   clave: string;
   valor: string;
   usuario?: string;
-  rol: UserRole;
+  rol: UserRole | 'NOTIFICATION_CONFIG';
   uidad_operativa_id?: string;
+  correo1?: string;
+  correo2?: string;
+  correo3?: string;
+  correo4?: string;
 }

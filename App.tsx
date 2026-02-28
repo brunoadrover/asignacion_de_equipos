@@ -176,7 +176,84 @@ const App: React.FC = () => {
         periodo_utilizacion: req.usagePeriod
     });
 
-    if (!error) await fetchRequests();
+    if (!error) {
+        await fetchRequests();
+        
+        // Send Email Notification
+        try {
+            console.log("Starting email notification process for req:", req);
+            const uo = uos.find(u => u.id === req.uo_id);
+            const uoName = uo?.nombre || 'UO Desconocida';
+            
+            // Fetch notification config for this UO
+            console.log("Fetching notification config for UO ID:", req.uo_id);
+            const { data: configData, error: configError } = await supabase
+                .from('configuracion_sistema')
+                .select('*')
+                .eq('uidad_operativa_id', req.uo_id)
+                .eq('rol', 'NOTIFICATION_CONFIG')
+                .maybeSingle();
+            
+            if (configError) {
+                console.error("Error fetching notification config:", configError);
+            }
+
+            if (configData) {
+                console.log("Config found:", configData);
+                const recipients = [configData.correo1, configData.correo2, configData.correo3, configData.correo4]
+                    .filter(email => email && email.trim() !== '' && email.includes('@'));
+                
+                console.log("Recipients found:", recipients);
+
+                if (recipients.length > 0) {
+                    const subject = `${uoName}: Nueva Solicitud de equipo creada`;
+                    const body = `
+¡Nueva solicitud de equipo generada!
+
+Fecha creación: ${req.requestDate}
+UO: ${uoName}
+
+Descripción: ${req.description}
+Detalle: ${req.capacity || '-'}
+Comentarios: ${req.comments || '-'}
+Cantidad: ${req.quantity}
+Fecha de necesidad: ${req.needDate}
+Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
+                    `.trim();
+
+                    console.log("Calling /api/send-request-email...");
+                    const response = await fetch('/api/send-request-email', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ to: recipients, subject, body })
+                    });
+                    
+                    const responseText = await response.text();
+                    let result;
+                    try {
+                        result = JSON.parse(responseText);
+                        console.log("Email API result:", result);
+                    } catch (parseErr) {
+                        console.error("Failed to parse email API response as JSON. Status:", response.status, "Response:", responseText);
+                        return;
+                    }
+                    
+                    if (!response.ok) {
+                        console.error("Failed to send email. Status:", response.status, "Error:", result);
+                    } else {
+                        console.log("Email sent successfully!");
+                    }
+                } else {
+                    console.log("No valid recipients configured for this UO.");
+                }
+            } else {
+                console.log("No notification config found for this UO in configuracion_sistema.");
+                alert("Atención: No se encontró configuración de correos para esta Unidad Operativa. Por favor, configúrelos en la pantalla de Configuración para recibir notificaciones.");
+            }
+        } catch (emailErr) {
+            console.error("Error sending notification email:", emailErr);
+        }
+    }
   };
 
   const handleUpdateRequest = async (id: string, updates: Partial<EquipmentRequest>) => {
