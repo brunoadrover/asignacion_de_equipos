@@ -100,8 +100,22 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
         </div>
 
         <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Periodo (Meses)</label>
-            <input type="number" min="0.5" step="0.5" placeholder="Ej: 6" className={inputClasses} value={formData.usagePeriod} onChange={(e) => setFormData({...formData, usagePeriod: e.target.value ? Number(e.target.value) : ''})} />
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Periodo (Meses) <span className="text-red-500">*</span>
+            </label>
+            <input 
+              required 
+              type="number" 
+              min="0.5" 
+              step="0.5" 
+              placeholder="Ej: 6" 
+              className={`${inputClasses} ${!formData.usagePeriod ? 'border-red-300 bg-red-50' : ''}`} 
+              value={formData.usagePeriod} 
+              onChange={(e) => setFormData({...formData, usagePeriod: e.target.value ? Number(e.target.value) : ''})} 
+            />
+            {!formData.usagePeriod && (
+              <p className="text-[10px] text-red-500 mt-1">Campo obligatorio</p>
+            )}
         </div>
 
         <div className="lg:col-span-4">
@@ -109,8 +123,16 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
           <input type="text" placeholder="Detalles adicionales..." className={inputClasses} value={formData.comments} onChange={(e) => setFormData({...formData, comments: e.target.value})} />
         </div>
 
-        <div className="lg:col-span-4 flex justify-end">
-          <Button type="submit">Agregar Solicitud</Button>
+        <div className="lg:col-span-4 flex flex-col items-end gap-2">
+          {!formData.usagePeriod && (
+            <span className="text-xs text-amber-600 font-medium italic">Complete el periodo para habilitar el envío</span>
+          )}
+          <Button 
+            type="submit" 
+            disabled={!formData.usagePeriod || !formData.uo_id || !formData.categoria_id || !formData.description || !formData.needDate}
+          >
+            Agregar Solicitud
+          </Button>
         </div>
       </form>
     </div>
