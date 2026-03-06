@@ -32,6 +32,12 @@ export interface Categoria {
   nombre: string;
 }
 
+export interface MaestroEquipo {
+  id: string;
+  familia: string;
+  descripcion: string;
+}
+
 export interface EquipmentRequest {
   id: string;
   requestDate: string;

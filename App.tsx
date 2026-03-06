@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { RequestForm } from './components/RequestForm';
-import { EquipmentRequest, RequestStatus, ViewMode, OwnDetails, BuyDetails, UnidadOperativa, Categoria, UserRole } from './types';
+import { EquipmentRequest, RequestStatus, ViewMode, OwnDetails, BuyDetails, UnidadOperativa, Categoria, UserRole, MaestroEquipo } from './types';
 import { AssignOwnModal } from './components/AssignOwnModal';
 import { AssignRentModal } from './components/AssignRentModal';
 import { AssignBuyModal } from './components/AssignBuyModal';
@@ -22,9 +22,9 @@ const App: React.FC = () => {
   const [requests, setRequests] = useState<EquipmentRequest[]>([]);
   const [uos, setUos] = useState<UnidadOperativa[]>([]);
   const [categories, setCategories] = useState<Categoria[]>([]);
+  const [maestroEquipos, setMaestroEquipos] = useState<MaestroEquipo[]>([]);
   const [view, setView] = useState<ViewMode>('DASHBOARD');
   const [searchTerm, setSearchTerm] = useState('');
-  const [categoryFilter, setCategoryFilter] = useState('');
   const [uoFilter, setUoFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   
@@ -56,7 +56,10 @@ const App: React.FC = () => {
         if (uoData) setUos(uoData || []);
 
         const { data: catData } = await supabase.from('categorias').select('*').order('nombre');
-        if (catData) setCategories(catData || []);
+        setCategories(catData || []);
+
+        const { data: maestroData } = await supabase.from('maestro_equipos').select('*').order('descripcion');
+        if (maestroData) setMaestroEquipos(maestroData || []);
     } catch (e) {
         console.error("Error fetching initial data", e);
     } finally {
@@ -163,10 +166,16 @@ const App: React.FC = () => {
   };
 
   const handleAddRequest = async (req: any) => {
-    const { error } = await supabase.from('solicitudes').insert({
+    console.log("Attempting to add request with data:", req);
+    
+    // Fallback to first category if none provided (since we removed the selector)
+    const defaultCategoryId = categories.length > 0 ? categories[0].id : null;
+    console.log("Using defaultCategoryId:", defaultCategoryId);
+
+    const payload = {
         fecha_solicitud: req.requestDate,
         unidad_operativa_id: req.uo_id,
-        categoria_id: req.categoria_id,
+        categoria_id: defaultCategoryId,
         descripcion: req.description,
         capacidad: req.capacity,
         cantidad_total: req.quantity,
@@ -174,14 +183,25 @@ const App: React.FC = () => {
         comentarios: req.comments,
         estado_general: 'PENDING',
         periodo_utilizacion: req.usagePeriod
-    });
+    };
+    
+    console.log("Final payload for Supabase:", payload);
 
-    if (!error) {
-        await fetchRequests();
-        
-        // Send Email Notification
-        try {
-            console.log("Starting email notification process for req:", req);
+    const { data, error } = await supabase.from('solicitudes').insert(payload).select();
+
+    if (error) {
+        console.error("Error creating request in Supabase:", error);
+        alert("Error al crear la solicitud: " + error.message + "\nDetalles: " + JSON.stringify(error));
+        return;
+    }
+
+    console.log("Request created successfully, data returned:", data);
+
+    await fetchRequests();
+
+    // Send Email Notification
+    try {
+        console.log("Starting email notification process for req:", req);
             const uo = uos.find(u => u.id === req.uo_id);
             const uoName = uo?.nombre || 'UO Desconocida';
             
@@ -253,7 +273,6 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
         } catch (emailErr) {
             console.error("Error sending notification email:", emailErr);
         }
-    }
   };
 
   const handleUpdateRequest = async (id: string, updates: Partial<EquipmentRequest>) => {
@@ -449,7 +468,6 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                              r.uo_nombre?.toLowerCase().includes(searchTerm.toLowerCase()) || 
                              r.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                              r.ownDetails?.internalId.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = categoryFilter === '' || r.categoria_id === categoryFilter;
         
         // Strict UO filtering for USER role
         let matchesUO = uoFilter === '' || r.uo_id === uoFilter;
@@ -457,7 +475,7 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
             matchesUO = r.uo_id === currentUser.uo_id;
         }
 
-        return matchesStatus && matchesSearch && matchesCategory && matchesUO;
+        return matchesStatus && matchesSearch && matchesUO;
     });
   };
 
@@ -470,7 +488,7 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
     doc.text("Reporte Unificado de Gestión de Equipos", 14, 20);
     doc.setFontSize(10);
     doc.setTextColor(100);
-    doc.text(`Filtros aplicados - UO: ${uos.find(u=>u.id===uoFilter)?.nombre || 'Todas'}, Cat: ${categories.find(c=>c.id===categoryFilter)?.nombre || 'Todas'}`, 14, 28);
+    doc.text(`Filtros aplicados - UO: ${uos.find(u=>u.id===uoFilter)?.nombre || 'Todas'}`, 14, 28);
     
     let yPos = 35;
 
@@ -605,13 +623,6 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                         </select>
                      </div>
                    )}
-                   <div className="relative w-full sm:w-44">
-                      <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                      <select className="pl-9 pr-4 py-2 border rounded-md text-sm w-full bg-white text-slate-900 border-slate-300 appearance-none" value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
-                          <option value="">Categorías</option>
-                          {categories.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                      </select>
-                   </div>
                    <div className="relative w-full sm:w-56">
                       <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                       <input type="text" placeholder="Buscar..." className="pl-10 pr-4 py-2 border rounded-md text-sm w-full bg-white text-slate-900 border-slate-300" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -622,7 +633,7 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                 </div>
               </div>
 
-              <RequestForm onSubmit={handleAddRequest} uos={uos} categories={categories} currentUser={currentUser} />
+              <RequestForm onSubmit={handleAddRequest} uos={uos} maestroEquipos={maestroEquipos} currentUser={currentUser} />
               
               <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
                 <div className="p-4 border-b border-slate-200 bg-blue-50/50 flex items-center justify-between">
@@ -633,8 +644,8 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                   <table className="w-full text-sm text-left">
                     <thead className="text-[11px] text-slate-500 uppercase bg-slate-50 border-b">
                       <tr>
-                        <th className="px-4 py-3">Descripción / Comentarios</th>
-                        <th className="px-4 py-3">Detalle</th>
+                        <th className="px-4 py-3">Descripción / Familia</th>
+                        <th className="px-4 py-3">COMENTARIOS</th>
                         <th className="px-4 py-3">Cant.</th>
                         <th className="px-4 py-3">Necesidad</th>
                         <th className="px-4 py-3">Periodo</th>
@@ -666,14 +677,14 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                                             ) : (
                                             <div>
                                                 <div className="font-medium text-slate-800">{req.description}</div>
-                                                {req.comments && <div className="text-[10px] text-slate-500 italic mt-0.5 border-t border-slate-100 pt-0.5 leading-tight">{req.comments}</div>}
+                                                <div className="text-[10px] text-slate-500 italic mt-0.5 border-t border-slate-100 pt-0.5 leading-tight">{req.capacity}</div>
                                             </div>
                                             )}
                                         </td>
                                         <td className="px-4 py-3 text-slate-600">
                                             {isEditing ? (
-                                                <input type="text" placeholder="Detalle (Ej: 20T)" className="border rounded p-1 text-xs w-full bg-white text-slate-900 border-slate-300" value={editPendingValues.capacity} onChange={(e) => setEditPendingValues({...editPendingValues, capacity: e.target.value})} />
-                                            ) : req.capacity}
+                                                <input type="text" placeholder="Comentarios" className="border rounded p-1 text-xs w-full bg-white text-slate-900 border-slate-300" value={editPendingValues.comments} onChange={(e) => setEditPendingValues({...editPendingValues, comments: e.target.value})} />
+                                            ) : req.comments}
                                         </td>
                                         <td className="px-4 py-3 font-semibold">
                                             {isEditing ? (
@@ -739,9 +750,8 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                   title="2. Asignación Equipo Propio" 
                   status={RequestStatus.OWN} 
                   requests={requests} 
-                  categories={categories} 
                   uos={uos} 
-                  globalFilters={{ searchTerm, categoryFilter, uoFilter }}
+                  globalFilters={{ searchTerm, uoFilter }}
                   currentUser={currentUser}
                   onMarkCompleted={handleMarkAsCompleted} 
                   onUpdateRequest={handleUpdateRequest} 
@@ -755,9 +765,8 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                   title="3. Gestión de Compra" 
                   status={RequestStatus.BUY} 
                   requests={requests} 
-                  categories={categories} 
                   uos={uos} 
-                  globalFilters={{ searchTerm, categoryFilter, uoFilter }}
+                  globalFilters={{ searchTerm, uoFilter }}
                   currentUser={currentUser}
                   onMarkCompleted={handleMarkAsCompleted} 
                   onUpdateRequest={handleUpdateRequest} 
@@ -771,9 +780,8 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                   title="4. Alquiler de Equipos" 
                   status={RequestStatus.RENT} 
                   requests={requests} 
-                  categories={categories} 
                   uos={uos} 
-                  globalFilters={{ searchTerm, categoryFilter, uoFilter }}
+                  globalFilters={{ searchTerm, uoFilter }}
                   currentUser={currentUser}
                   onMarkCompleted={handleMarkAsCompleted} 
                   onUpdateRequest={handleUpdateRequest} 
@@ -789,7 +797,6 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                 title="Historial de Solicitudes Completadas" 
                 status={RequestStatus.COMPLETED} 
                 requests={requests} 
-                categories={categories} 
                 uos={uos} 
                 currentUser={currentUser}
                 onReturnToPending={handleRevertCompleted}

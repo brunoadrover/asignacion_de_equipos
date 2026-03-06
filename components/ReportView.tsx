@@ -50,7 +50,6 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const [localUo, setLocalUo] = useState('');
 
   const searchTerm = globalFilters ? globalFilters.searchTerm : localSearch;
-  const categoryFilter = globalFilters ? globalFilters.categoryFilter : localCategory;
   const uoFilter = globalFilters ? globalFilters.uoFilter : localUo;
 
   const groupedData = useMemo(() => {
@@ -66,15 +65,13 @@ export const ReportView: React.FC<ReportViewProps> = ({
         (r.uo_nombre || '').toLowerCase().includes(term) ||
         (r.comments || '').toLowerCase().includes(term);
       
-      const matchesCategory = categoryFilter === '' || r.categoria_id === categoryFilter;
-      
       // Strict UO filtering for USER role
       let matchesUO = uoFilter === '' || r.uo_id === uoFilter;
       if (currentUser?.rol === UserRole.USER && currentUser.uo_id) {
           matchesUO = r.uo_id === currentUser.uo_id;
       }
 
-      return matchesSearch && matchesCategory && matchesUO;
+      return matchesSearch && matchesUO;
     });
 
     return filtered.reduce((groups, req) => {
@@ -83,7 +80,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
       groups[uo].push(req);
       return groups;
     }, {} as Record<string, EquipmentRequest[]>);
-  }, [requests, status, searchTerm, categoryFilter, uoFilter]);
+  }, [requests, status, searchTerm, uoFilter]);
 
   const hasData = Object.keys(groupedData).length > 0;
 
@@ -102,8 +99,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
     // Filter Info
     let filterText = "Filtros aplicados: ";
     const uoName = uoFilter ? uos.find(u => u.id === uoFilter)?.nombre : "Todos";
-    const catName = categoryFilter ? categories.find(c => c.id === categoryFilter)?.nombre : "Todas";
-    filterText += `UO: ${uoName} | Cat: ${catName}`;
+    filterText += `UO: ${uoName}`;
     if(searchTerm) filterText += ` | Busqueda: "${searchTerm}"`;
     
     doc.text(filterText, 14, 34);
@@ -178,13 +174,6 @@ export const ReportView: React.FC<ReportViewProps> = ({
                     </select>
                 </div>
             )}
-            <div className="relative w-full sm:w-48">
-                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                <select className="pl-9 pr-4 py-2 border rounded-md text-sm w-full bg-white text-slate-900 border-slate-300 appearance-none" value={localCategory} onChange={(e) => setLocalCategory(e.target.value)}>
-                    <option value="">Todas las Categorías</option>
-                    {categories.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                </select>
-            </div>
             <div className="relative w-full sm:w-64">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
                 <input type="text" placeholder="Buscar..." className="pl-10 pr-4 py-2 border rounded-md text-sm w-full bg-white text-slate-900 border-slate-300" value={localSearch} onChange={(e) => setLocalSearch(e.target.value)} />

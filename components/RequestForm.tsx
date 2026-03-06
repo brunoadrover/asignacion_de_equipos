@@ -1,19 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { PlusCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { PlusCircle, Search, ChevronDown } from 'lucide-react';
 import { Button } from './Button';
-import { EquipmentRequest, RequestStatus, UnidadOperativa, Categoria, UserRole } from '../types';
+import { EquipmentRequest, RequestStatus, UnidadOperativa, Categoria, UserRole, MaestroEquipo } from '../types';
 
 interface RequestFormProps {
   onSubmit: (req: any) => void;
   uos: UnidadOperativa[];
-  categories: Categoria[];
+  maestroEquipos: MaestroEquipo[];
   currentUser: { rol: UserRole; uo_id?: string } | null;
 }
 
-export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categories, currentUser }) => {
+export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, maestroEquipos, currentUser }) => {
   const [formData, setFormData] = useState({
     uo_id: '',
-    categoria_id: '',
     description: '',
     capacity: '',
     quantity: 1,
@@ -21,6 +20,20 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
     needDate: '',
     comments: ''
   });
+
+  const [isDescOpen, setIsDescOpen] = useState(false);
+  const [descSearch, setDescSearch] = useState('');
+  const descRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (descRef.current && !descRef.current.contains(event.target as Node)) {
+        setIsDescOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (currentUser?.rol === UserRole.USER && currentUser.uo_id) {
@@ -37,7 +50,6 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
     onSubmit(newRequestData);
     setFormData({ 
       uo_id: currentUser?.rol === UserRole.USER ? (currentUser.uo_id || '') : '', 
-      categoria_id: '', 
       description: '', 
       capacity: '', 
       quantity: 1, 
@@ -45,7 +57,22 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
       needDate: '', 
       comments: '' 
     });
+    setDescSearch('');
   };
+
+  const handleDescriptionSelect = (m: MaestroEquipo) => {
+    setFormData({
+      ...formData,
+      description: m.descripcion,
+      capacity: m.familia
+    });
+    setDescSearch(m.descripcion);
+    setIsDescOpen(false);
+  };
+
+  const filteredMaestro = maestroEquipos.filter(m => 
+    m.descripcion.toLowerCase().includes(descSearch.toLowerCase())
+  );
 
   const inputClasses = "w-full rounded-md border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 border p-2 text-sm bg-white text-slate-900 placeholder:text-slate-400";
 
@@ -71,22 +98,58 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
           </select>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Categoría</label>
-          <select required className={inputClasses} value={formData.categoria_id} onChange={(e) => setFormData({...formData, categoria_id: e.target.value})}>
-            <option value="" disabled>Seleccione Categoría...</option>
-            {categories.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
-        </div>
-
-        <div className="lg:col-span-2">
+        <div className="relative" ref={descRef}>
           <label className="block text-sm font-medium text-slate-700 mb-1">Descripción</label>
-          <input required type="text" placeholder="Ej: Camioneta 4x4" className={inputClasses} value={formData.description} onChange={(e) => setFormData({...formData, description: e.target.value})} />
+          <div 
+            className={`relative flex items-center ${inputClasses} cursor-text`}
+            onClick={() => setIsDescOpen(true)}
+          >
+            <input 
+              type="text"
+              placeholder="Buscar equipo..."
+              className="w-full bg-transparent outline-none border-none p-0 text-sm"
+              value={descSearch}
+              onChange={(e) => {
+                setDescSearch(e.target.value);
+                setIsDescOpen(true);
+                if (e.target.value === '') {
+                  setFormData({...formData, description: '', capacity: ''});
+                }
+              }}
+              required={!formData.description}
+            />
+            <ChevronDown size={16} className={`text-slate-400 transition-transform ${isDescOpen ? 'rotate-180' : ''}`} />
+          </div>
+
+          {isDescOpen && (
+            <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+              {filteredMaestro.length > 0 ? (
+                filteredMaestro.map((m) => (
+                  <div 
+                    key={m.id}
+                    className="px-4 py-2 text-sm hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-none flex flex-col"
+                    onClick={() => handleDescriptionSelect(m)}
+                  >
+                    <span className="font-medium text-slate-900">{m.descripcion}</span>
+                    <span className="text-[10px] text-slate-500 uppercase tracking-wider">{m.familia}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="px-4 py-3 text-sm text-slate-400 italic">No se encontraron resultados</div>
+              )}
+            </div>
+          )}
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Capacidad / Esp.</label>
-          <input type="text" placeholder="Ej: Doble Cabina / 20T" className={inputClasses} value={formData.capacity} onChange={(e) => setFormData({...formData, capacity: e.target.value})} />
+          <label className="block text-sm font-medium text-slate-700 mb-1">Familia</label>
+          <input 
+            type="text" 
+            readOnly 
+            placeholder="Familia del equipo" 
+            className={`${inputClasses} bg-slate-50 cursor-not-allowed font-medium text-blue-800`} 
+            value={formData.capacity} 
+          />
         </div>
 
         <div>
@@ -129,7 +192,7 @@ export const RequestForm: React.FC<RequestFormProps> = ({ onSubmit, uos, categor
           )}
           <Button 
             type="submit" 
-            disabled={!formData.usagePeriod || !formData.uo_id || !formData.categoria_id || !formData.description || !formData.needDate}
+            disabled={!formData.usagePeriod || !formData.uo_id || !formData.description || !formData.needDate}
           >
             Agregar Solicitud
           </Button>
