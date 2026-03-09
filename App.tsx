@@ -585,7 +585,7 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
           <nav className="flex-1 p-4 space-y-2 flex flex-col">
           <SidebarItem active={view === 'DASHBOARD'} onClick={() => setView('DASHBOARD')} icon={<LayoutDashboard size={20} />} label="Control de Requerimientos" />
           <div className="pt-6 pb-2 px-3 text-xs font-semibold uppercase text-white/50 tracking-wider">Historial</div>
-          <SidebarItem active={view === 'COMPLETED'} onClick={() => setView('COMPLETED')} icon={<CheckSquare size={20} />} label="Completadas" />
+          <SidebarItem active={view === 'COMPLETED'} onClick={() => setView('COMPLETED')} icon={<CheckSquare size={20} />} label="Requerimientos Cumplidos" />
           <div className="flex-1"></div>
           <div className="pt-4 border-t border-white/10 mt-2 space-y-2">
             {currentUser && (
@@ -794,7 +794,7 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
 
           {view === 'COMPLETED' && (
             <ReportView 
-                title="Historial de Solicitudes Completadas" 
+                title="Historial de Requerimientos Cumplidos" 
                 status={RequestStatus.COMPLETED} 
                 requests={requests} 
                 uos={uos} 
