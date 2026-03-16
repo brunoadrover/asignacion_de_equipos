@@ -91,8 +91,10 @@ const NotificationManager: React.FC<{ uos: UnidadOperativa[] }> = ({ uos }) => {
     };
 
     const handleSave = async (uoId: string) => {
-        const clave = `NOTIF_UO_${uoId}`;
-        const payload = {
+        const existing = configs.find(c => c.uidad_operativa_id === uoId);
+        const clave = existing?.clave || `NOTIF_UO_${uoId}`;
+        
+        const payload: any = {
             clave,
             valor: 'CONFIG',
             rol: 'NOTIFICATION_CONFIG',
@@ -103,7 +105,22 @@ const NotificationManager: React.FC<{ uos: UnidadOperativa[] }> = ({ uos }) => {
             correo4: editValues.correo4 || ''
         };
 
-        const { error } = await supabase.from('configuracion_sistema').upsert(payload);
+        let error;
+        if (existing) {
+            // If it exists, we update by clave
+            const { error: updateError } = await supabase
+                .from('configuracion_sistema')
+                .update(payload)
+                .eq('clave', clave);
+            error = updateError;
+        } else {
+            // If it doesn't exist, we insert
+            const { error: insertError } = await supabase
+                .from('configuracion_sistema')
+                .insert(payload);
+            error = insertError;
+        }
+
         if (!error) {
             fetchConfigs();
             setEditingUoId(null);

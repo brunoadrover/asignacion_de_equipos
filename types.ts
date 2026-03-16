@@ -71,6 +71,7 @@ export enum UserRole {
 }
 
 export interface UserConfig {
+  id?: string | number;
   clave: string;
   valor: string;
   usuario?: string;

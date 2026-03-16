@@ -528,16 +528,16 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
             let body: string[][] = [];
 
             if (section.status === RequestStatus.PENDING) {
-                head = [['Descripción', 'Detalle', 'Cant', 'F. Nec.', 'Periodo', 'Comentarios']];
+                head = [['Descripción', 'COMENTARIOS', 'Cant', 'F. Nec.', 'Periodo', 'Comentarios']];
                 body = items.map(r => [r.description, r.capacity, r.quantity.toString(), r.needDate, r.usagePeriod ? `${r.usagePeriod} m` : '-', r.comments || '']);
             } else if (section.status === RequestStatus.OWN) {
                 head = [['Descripción', 'Interno', 'Marca/Modelo', 'Cant', 'F. Disp.', 'Periodo']];
                 body = items.map(r => [r.description, r.ownDetails?.internalId || '-', `${r.ownDetails?.brand} ${r.ownDetails?.model}`, r.quantity.toString(), r.ownDetails?.availabilityDate || '-', r.usagePeriod ? `${r.usagePeriod} m` : '-']);
             } else if (section.status === RequestStatus.BUY) {
-                head = [['Descripción', 'Detalle', 'Cant', 'F. Nec.', 'Periodo', 'Comentarios']];
+                head = [['Descripción', 'COMENTARIOS', 'Cant', 'F. Nec.', 'Periodo', 'Comentarios']];
                 body = items.map(r => [r.description, r.capacity, r.quantity.toString(), r.needDate, r.usagePeriod ? `${r.usagePeriod} m` : '-', r.comments || '']);
             } else {
-                head = [['Descripción', 'Detalle', 'Cant', 'F. Nec.', 'Periodo', 'Plazo']];
+                head = [['Descripción', 'COMENTARIOS', 'Cant', 'F. Nec.', 'Periodo', 'Plazo']];
                 body = items.map(r => [r.description, r.capacity, r.quantity.toString(), r.needDate, r.usagePeriod ? `${r.usagePeriod} m` : '-', `${r.rentalDuration} meses`]);
             }
 
@@ -557,7 +557,7 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
         yPos += 5;
     });
 
-    doc.save(`Reporte_Unificado_${dateStr}.pdf`);
+    doc.save(`Reporte_Historial_de_Requerimientos_Cumplidos_${dateStr}.pdf`);
   };
 
   const pendingList = getFilteredRequests(RequestStatus.PENDING);

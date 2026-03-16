@@ -118,8 +118,8 @@ export const ReportView: React.FC<ReportViewProps> = ({
       if (isOwn) head = [['Descripción', 'Cant', 'Fecha Nec.', 'Periodo', 'Interno', 'Marca', 'Modelo', 'Disp.']];
       else if (isRent) head = [['Descripción', 'Capacidad', 'Cantidad', 'Fecha Nec.', 'Periodo', 'Plazo', 'Comentarios']];
       else if (isBuy) head = [['Descripción', 'Proveedor', 'Fecha Entrega', 'Cant', 'Fecha Nec.', 'Periodo', 'Comentarios']];
-      else if (isCompleted) head = [['Descripción', 'Origen', 'Detalle', 'Cant', 'Fecha Cierre', 'Periodo']];
-      else head = [['Descripción', 'Capacidad', 'Cantidad', 'Fecha Nec.', 'Periodo', 'Solicitud', 'Comentarios']];
+      else if (isCompleted) head = [['Descripción', 'Origen', 'COMENTARIOS', 'Cant', 'Fecha Cierre', 'Periodo']];
+      else head = [['Descripción', 'COMENTARIOS', 'Cantidad', 'Fecha Nec.', 'Periodo', 'Solicitud', 'Comentarios']];
       
       const body = items.map(req => {
         const period = req.usagePeriod ? `${req.usagePeriod} m` : '-';
@@ -138,7 +138,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
       yPos = (doc as any).lastAutoTable.finalY + 15;
     });
     
-    doc.save(`Reporte_${title.replace(/\s+/g, '_')}_${dateStr}.pdf`);
+    doc.save(`Reporte_Historial_de_Requerimientos_Cumplidos_${dateStr}.pdf`);
   };
 
   const startEditing = (req: EquipmentRequest) => { setEditingId(req.id); setEditValues({ ...req }); };
@@ -209,7 +209,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
               <thead className="text-[11px] text-slate-500 uppercase bg-slate-50 border-b">
                 <tr>
                   <th className="px-6 py-3">UO / Descripción</th>
-                  <th className="px-6 py-3">{status === RequestStatus.COMPLETED ? 'Gestión' : 'Detalle'}</th>
+                  <th className="px-6 py-3">{status === RequestStatus.COMPLETED ? 'Gestión' : 'COMENTARIOS'}</th>
                   <th className="px-6 py-3">Cant.</th>
                   <th className="px-6 py-3">F. Nec.</th>
                   <th className="px-6 py-3">Periodo</th>
