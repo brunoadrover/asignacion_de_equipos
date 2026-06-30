@@ -420,16 +420,37 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
     }
   };
 
-  const handleRetireEquipment = async (equipoId: string) => {
+  const handleRetireEquipment = async (equipoId: string, asignacionId?: string, solicitudId?: string) => {
     try {
         if (!equipoId) return;
 
-        const { error } = await supabase
+        // 1. Update equipos to set estado_actual to null
+        const { error: equipoError } = await supabase
             .from('equipos')
             .update({ estado_actual: null })
             .eq('id', equipoId);
 
-        if (error) throw error;
+        if (equipoError) throw equipoError;
+
+        // 2. Delete assignment from asignaciones if provided
+        if (asignacionId) {
+            const { error: asignacionError } = await supabase
+                .from('asignaciones')
+                .delete()
+                .eq('id', asignacionId);
+                
+            if (asignacionError) throw asignacionError;
+        }
+
+        // 3. Delete request from solicitudes if provided
+        if (solicitudId) {
+            const { error: solicitudError } = await supabase
+                .from('solicitudes')
+                .delete()
+                .eq('id', solicitudId);
+                
+            if (solicitudError) throw solicitudError;
+        }
         
         await fetchRequests();
         await fetchEquipmentsList();
@@ -724,19 +745,23 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
               </div>
               
               {availableAssetsCount > 0 && (
-                <div className="bg-[#EAF2EE] border border-[#D5E5DD] rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-md animate-pulse">
                   <div className="flex items-center gap-3">
-                    <div className="p-2.5 bg-[#1B4D3E] rounded-lg text-white shadow-sm">
-                      <Package size={20} />
+                    <div className="p-2.5 bg-amber-500 rounded-lg text-white shadow-sm flex items-center justify-center">
+                      <AlertTriangle size={22} className="text-white" />
                     </div>
                     <div>
-                      <h4 className="font-bold text-[#1B4D3E] text-sm">Equipos Propios Disponibles para Nuevos Proyectos</h4>
-                      <p className="text-xs text-slate-600 mt-0.5">Se registran <span className="font-bold text-[#1B4D3E] font-mono">{availableAssetsCount}</span> activos a disposición listos para asignarse.</p>
+                      <h4 className="font-bold text-amber-950 text-sm">
+                        ¡Atención! Equipos Propios Disponibles para Nuevos Proyectos
+                      </h4>
+                      <p className="text-xs text-amber-800 mt-0.5 font-medium">
+                        Se registran <span className="font-extrabold text-amber-950 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded font-mono">{availableAssetsCount}</span> activos a disposición listos para asignarse.
+                      </p>
                     </div>
                   </div>
                   <button 
                     onClick={() => setView('AVAILABLE_ASSETS')} 
-                    className="bg-[#1B4D3E] hover:bg-[#113026] text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
+                    className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs px-4 py-2.5 rounded-lg transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
                   >
                     Ver Activos a Disposición <ArrowRight size={14} />
                   </button>

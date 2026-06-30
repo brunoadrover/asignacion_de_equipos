@@ -8,7 +8,7 @@ import { Button } from './Button';
 interface AvailableAssetsViewProps {
   requests: EquipmentRequest[];
   onRefresh?: () => void;
-  onRetireEquipment?: (equipoId: string) => Promise<void>;
+  onRetireEquipment?: (equipoId: string, asignacionId?: string, solicitudId?: string) => Promise<void>;
 }
 
 export const AvailableAssetsView: React.FC<AvailableAssetsViewProps> = ({ 
@@ -237,7 +237,7 @@ export const AvailableAssetsView: React.FC<AvailableAssetsViewProps> = ({
                         <button
                           onClick={() => {
                             if (window.confirm('¿Está seguro de que desea retirar este equipo? Se eliminará de la lista de activos a disposición.')) {
-                              onRetireEquipment?.(req.ownDetails?.equipo_id || '');
+                              onRetireEquipment?.(req.ownDetails?.equipo_id || '', req.id, req.solicitud_id);
                             }
                           }}
                           className="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all shadow-sm"
