@@ -8,7 +8,8 @@ import { AssignBuyModal } from './components/AssignBuyModal';
 import { ReportView } from './components/ReportView';
 import { SettingsView } from './components/SettingsView';
 import { LoginScreen } from './components/LoginScreen';
-import { LayoutDashboard, ShoppingCart, Key, Search, Calendar, Package, Settings, Filter, CheckSquare, LogOut, Pencil, Trash2, X, Save, CheckCircle, Loader2, FileDown } from 'lucide-react';
+import { AvailableAssetsView } from './components/AvailableAssetsView';
+import { LayoutDashboard, ShoppingCart, Key, Search, Calendar, Package, Settings, Filter, CheckSquare, LogOut, Pencil, Trash2, X, Save, CheckCircle, Loader2, FileDown, ArrowRight, AlertTriangle } from 'lucide-react';
 import { Button } from './components/Button';
 import { supabase } from './lib/supabase';
 import { jsPDF } from 'jspdf';
@@ -23,10 +24,24 @@ const App: React.FC = () => {
   const [uos, setUos] = useState<UnidadOperativa[]>([]);
   const [categories, setCategories] = useState<Categoria[]>([]);
   const [maestroEquipos, setMaestroEquipos] = useState<MaestroEquipo[]>([]);
+  const [equipmentsList, setEquipmentsList] = useState<any[]>([]);
   const [view, setView] = useState<ViewMode>('DASHBOARD');
   const [searchTerm, setSearchTerm] = useState('');
   const [uoFilter, setUoFilter] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+
+  const fetchEquipmentsList = async () => {
+    try {
+        const { data, error } = await supabase
+            .from('equipos')
+            .select('*')
+            .order('nro_interno');
+        if (error) throw error;
+        setEquipmentsList(data || []);
+    } catch (e) {
+        console.error("Error fetching equipments list", e);
+    }
+  };
   
   const [editingPendingId, setEditingPendingId] = useState<string | null>(null);
   const [editPendingValues, setEditPendingValues] = useState<Partial<EquipmentRequest>>({});
@@ -60,6 +75,8 @@ const App: React.FC = () => {
 
         const { data: maestroData } = await supabase.from('maestro_equipos').select('*').order('descripcion');
         if (maestroData) setMaestroEquipos(maestroData || []);
+
+        await fetchEquipmentsList();
     } catch (e) {
         console.error("Error fetching initial data", e);
     } finally {
@@ -130,7 +147,8 @@ const App: React.FC = () => {
                         model: asig.equipos?.modelo || '',
                         hours: Number(asig.equipos?.horas_arrastre) || 0,
                         availabilityDate: asig.disponibilidad_obra || '',
-                        equipo_id: asig.equipo_id
+                        equipo_id: asig.equipo_id,
+                        estado_actual: asig.equipos?.estado_actual || ''
                     } : undefined,
                     buyDetails: asig.tipo_gestion === 'BUY' ? {
                         vendor: asig.compra_proveedor,
@@ -329,8 +347,26 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
             .eq('id', solicitudId);
 
         if (error) throw error;
+
+        // Fetch all assignments of type OWN for this solicitud to change their status to 'En Obra'
+        const { data: asignaciones } = await supabase
+            .from('asignaciones')
+            .select('equipo_id')
+            .eq('solicitud_id', solicitudId)
+            .eq('tipo_gestion', 'OWN');
+        
+        if (asignaciones && asignaciones.length > 0) {
+            const equipoIds = asignaciones.map(a => a.equipo_id).filter(Boolean);
+            if (equipoIds.length > 0) {
+                await supabase
+                    .from('equipos')
+                    .update({ estado_actual: 'En Obra' })
+                    .in('id', equipoIds);
+            }
+        }
         
         await fetchRequests();
+        await fetchEquipmentsList();
     } catch (error) {
         console.error("Error al completar la solicitud:", error);
         alert("Ocurrió un error al intentar marcar la solicitud como completada.");
@@ -355,6 +391,51 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
     } catch (error) {
         console.error("Error al revertir la solicitud:", error);
         alert("Ocurrió un error al intentar devolver el registro.");
+    }
+  };
+
+  const handleMakeAvailable = async (id: string) => {
+    try {
+        const req = requests.find(r => r.id === id);
+        if (!req) return;
+
+        const equipoId = req.ownDetails?.equipo_id;
+        if (!equipoId) {
+            alert("Este requerimiento no corresponde a un equipo propio asignado.");
+            return;
+        }
+
+        const { error } = await supabase
+            .from('equipos')
+            .update({ estado_actual: 'Disponible' })
+            .eq('id', equipoId);
+
+        if (error) throw error;
+        
+        await fetchRequests();
+        await fetchEquipmentsList();
+    } catch (error) {
+        console.error("Error al pasar a disponible:", error);
+        alert("Ocurrió un error al intentar pasar el equipo a disponible.");
+    }
+  };
+
+  const handleRetireEquipment = async (equipoId: string) => {
+    try {
+        if (!equipoId) return;
+
+        const { error } = await supabase
+            .from('equipos')
+            .update({ estado_actual: null })
+            .eq('id', equipoId);
+
+        if (error) throw error;
+        
+        await fetchRequests();
+        await fetchEquipmentsList();
+    } catch (error) {
+        console.error("Error al retirar el equipo:", error);
+        alert("Ocurrió un error al intentar retirar el equipo.");
     }
   };
 
@@ -571,6 +652,14 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
     }, {} as Record<string, EquipmentRequest[]>);
   }, [pendingList]);
 
+  const availableAssets = useMemo(() => {
+    return requests.filter(req => req.ownDetails && req.ownDetails.estado_actual === 'Disponible');
+  }, [requests]);
+
+  const availableAssetsCount = useMemo(() => {
+    return availableAssets.length;
+  }, [availableAssets]);
+
   if (!isAuthenticated) return <LoginScreen onLogin={handleLogin} uos={uos} />;
 
   if (isLoading) return <div className="min-h-screen flex items-center justify-center bg-slate-100"><Loader2 className="animate-spin text-emerald-700" size={48} /></div>;
@@ -585,7 +674,8 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
           <nav className="flex-1 p-4 space-y-2 flex flex-col">
           <SidebarItem active={view === 'DASHBOARD'} onClick={() => setView('DASHBOARD')} icon={<LayoutDashboard size={20} />} label="Control de Requerimientos" />
           <div className="pt-6 pb-2 px-3 text-xs font-semibold uppercase text-white/50 tracking-wider">Historial</div>
-          <SidebarItem active={view === 'COMPLETED'} onClick={() => setView('COMPLETED')} icon={<CheckSquare size={20} />} label="Requerimientos Cumplidos" />
+          <SidebarItem active={view === 'COMPLETED'} onClick={() => setView('COMPLETED')} icon={<CheckSquare size={20} />} label="Activos en Obra" />
+          <SidebarItem active={view === 'AVAILABLE_ASSETS'} onClick={() => setView('AVAILABLE_ASSETS')} icon={<Package size={20} />} label="Activos a Disposición" count={availableAssetsCount} />
           <div className="flex-1"></div>
           <div className="pt-4 border-t border-white/10 mt-2 space-y-2">
             {currentUser && (
@@ -632,6 +722,26 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                    </Button>
                 </div>
               </div>
+              
+              {availableAssetsCount > 0 && (
+                <div className="bg-[#EAF2EE] border border-[#D5E5DD] rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-[#1B4D3E] rounded-lg text-white shadow-sm">
+                      <Package size={20} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-[#1B4D3E] text-sm">Equipos Propios Disponibles para Nuevos Proyectos</h4>
+                      <p className="text-xs text-slate-600 mt-0.5">Se registran <span className="font-bold text-[#1B4D3E] font-mono">{availableAssetsCount}</span> activos a disposición listos para asignarse.</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => setView('AVAILABLE_ASSETS')} 
+                    className="bg-[#1B4D3E] hover:bg-[#113026] text-white font-semibold text-xs px-4 py-2.5 rounded-lg transition-all shadow-sm flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    Ver Activos a Disposición <ArrowRight size={14} />
+                  </button>
+                </div>
+              )}
 
               <RequestForm onSubmit={handleAddRequest} uos={uos} maestroEquipos={maestroEquipos} currentUser={currentUser} />
               
@@ -666,6 +776,11 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                                 {items.map((req) => {
                                     const isEditing = editingPendingId === req.id;
                                     const isDeleting = deletingPendingId === req.id;
+                                    const matchingAssets = availableAssets.filter(asset => 
+                                        asset.capacity && 
+                                        req.capacity && 
+                                        asset.capacity.trim().toLowerCase() === req.capacity.trim().toLowerCase()
+                                    );
                                     return (
                                         <tr key={req.id} className={`hover:bg-slate-50 transition-colors ${isEditing ? 'bg-blue-50/50' : ''}`}>
                                         <td className="px-4 py-3 pl-8">
@@ -675,10 +790,35 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                                                 <input type="text" placeholder="Comentarios" className="border rounded p-1 text-[10px] w-full bg-white text-slate-900 border-slate-300 italic focus:ring-1 focus:ring-blue-500" value={editPendingValues.comments} onChange={(e) => setEditPendingValues({...editPendingValues, comments: e.target.value})} />
                                             </div>
                                             ) : (
-                                            <div>
-                                                <div className="font-medium text-slate-800">{req.description}</div>
+                                            <div className="space-y-1">
+                                                <div className="font-medium text-slate-800 flex items-center gap-2 flex-wrap">
+                                                    <span>{req.description}</span>
+                                                    {req.categoria_nombre && (
+                                                        <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold border border-slate-200">
+                                                            Familia: {req.categoria_nombre}
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <div className="text-[10px] text-slate-500 italic mt-0.5 border-t border-slate-100 pt-0.5 leading-tight">{req.capacity}</div>
                                             </div>
+                                            )}
+                                            
+                                            {matchingAssets.length > 0 && (
+                                              <div className="mt-2 p-2.5 bg-amber-50 border border-amber-300 rounded-lg text-xs text-amber-800 animate-pulse shadow-sm max-w-md">
+                                                <div className="flex items-start gap-1.5">
+                                                  <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5 animate-bounce" />
+                                                  <div>
+                                                    <span className="font-bold text-amber-950">¡Atención! Activo a Disposición:</span> Hay <span className="font-mono font-extrabold text-amber-950 bg-amber-100 px-1.5 py-0.2 rounded">{matchingAssets.length}</span> equipo(s) de esta familia listos para ser reasignados.
+                                                    <div className="mt-1.5 flex flex-wrap gap-1">
+                                                      {matchingAssets.map(asset => (
+                                                        <span key={asset.id} className="inline-flex items-center bg-white px-1.5 py-0.5 rounded border border-amber-200 text-[10px] font-mono font-bold text-amber-900 shadow-sm">
+                                                          #{asset.ownDetails?.internalId} ({asset.ownDetails?.brand} {asset.ownDetails?.model})
+                                                        </span>
+                                                      ))}
+                                                    </div>
+                                                  </div>
+                                                </div>
+                                              </div>
                                             )}
                                         </td>
                                         <td className="px-4 py-3 text-slate-600">
@@ -794,12 +934,20 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
 
           {view === 'COMPLETED' && (
             <ReportView 
-                title="Historial de Requerimientos Cumplidos" 
+                title="Activos en Obra" 
                 status={RequestStatus.COMPLETED} 
                 requests={requests} 
                 uos={uos} 
                 currentUser={currentUser}
-                onReturnToPending={handleRevertCompleted}
+                onReturnToPending={handleMakeAvailable}
+            />
+          )}
+
+          {view === 'AVAILABLE_ASSETS' && (
+            <AvailableAssetsView 
+                requests={requests} 
+                onRefresh={fetchRequests}
+                onRetireEquipment={handleRetireEquipment}
             />
           )}
 

@@ -1,7 +1,7 @@
 
 import React, { useMemo, useState } from 'react';
 import { EquipmentRequest, RequestStatus, Categoria, UnidadOperativa, UserRole } from '../types';
-import { FileDown, MapPin, Undo2, CheckCircle, Archive, AlertTriangle, Pencil, Trash2, X, Save, Search, Filter, ClipboardCheck, Key, ShoppingCart, Calendar, RotateCcw } from 'lucide-react';
+import { FileDown, MapPin, Undo2, CheckCircle, Archive, AlertTriangle, Pencil, Trash2, X, Save, Search, Filter, ClipboardCheck, Key, ShoppingCart, Calendar, RotateCcw, PackageCheck } from 'lucide-react';
 import { Button } from './Button';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -55,6 +55,11 @@ export const ReportView: React.FC<ReportViewProps> = ({
   const groupedData = useMemo(() => {
     const filtered = requests.filter(r => {
       if (r.status !== status) return false;
+      
+      // If we are in COMPLETED status (Activos en Obra) and this is an OWN assignment and it is already 'Disponible', hide it.
+      if (status === RequestStatus.COMPLETED && r.ownDetails?.estado_actual === 'Disponible') {
+          return false;
+      }
       
       const term = searchTerm.toLowerCase();
       const matchesSearch = 
@@ -217,7 +222,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
                   {status === RequestStatus.RENT && <><th className="px-6 py-3 bg-amber-50 text-amber-700">Plazo</th><th className="px-6 py-3">Comentarios</th></>}
                   {status === RequestStatus.BUY && <th className="px-6 py-3">Comentarios</th>}
                   {status === RequestStatus.COMPLETED && <th className="px-6 py-3">Detalle Cierre</th>}
-                  {currentUser?.rol === UserRole.ADMIN && <th className="px-6 py-3 text-center">Acciones</th>}
+                  {(currentUser?.rol === UserRole.ADMIN || status === RequestStatus.COMPLETED) && <th className="px-6 py-3 text-center">Acciones</th>}
                 </tr>
               </thead>
               <tbody>
@@ -279,46 +284,52 @@ export const ReportView: React.FC<ReportViewProps> = ({
                                         </td>
                                     )}
 
-                                    {currentUser?.rol === UserRole.ADMIN && (
+                                    {(currentUser?.rol === UserRole.ADMIN || status === RequestStatus.COMPLETED) && (
                                       <td className="px-6 py-4">
                                           {status === RequestStatus.COMPLETED ? (
                                               <div className="flex justify-center">
+                                                  {req.ownDetails ? (
+                                                      <button 
+                                                          onClick={() => onReturnToPending?.(req.id)} 
+                                                          className="hover:text-emerald-600 p-1.5 hover:bg-emerald-50 rounded-full transition-all flex items-center gap-1.5 group border border-slate-200 hover:border-emerald-200 shadow-sm bg-white cursor-pointer" 
+                                                          title="Pasar equipo a disponible"
+                                                      >
+                                                          <PackageCheck size={18} className="text-emerald-600" />
+                                                          <span className="text-[11px] font-bold uppercase text-emerald-700">Pasar a Disponible</span>
+                                                      </button>
+                                                  ) : (
+                                                      <span className="text-[11px] text-slate-400 italic">No aplicable</span>
+                                                  )}
+                                              </div>
+                                          ) : currentUser?.rol === UserRole.ADMIN ? (
+                                              isDeleting ? (
+                                                  <div className="flex flex-col items-center gap-1">
+                                                  <span className="text-[10px] font-bold text-red-600 uppercase">¿Revertir?</span>
+                                                  <div className="flex gap-2">
+                                                      <button onClick={() => confirmReturn(req.id)} className="bg-red-600 text-white p-1 rounded-md"><CheckCircle size={14} /></button>
+                                                      <button onClick={() => setDeletingId(null)} className="bg-slate-200 text-slate-600 p-1 rounded-md"><X size={14} /></button>
+                                                  </div>
+                                                  </div>
+                                              ) : isEditing ? (
+                                                  <div className="flex justify-center gap-2">
+                                                  <button onClick={() => saveEditing(req.id)} className="text-emerald-600 p-1 hover:bg-emerald-100 rounded-full" title="Guardar"><Save size={18} /></button>
+                                                  <button onClick={cancelEditing} className="text-slate-400 p-1 hover:bg-slate-200 rounded-full" title="Cancelar"><X size={18} /></button>
+                                                  </div>
+                                              ) : (
+                                                  <div className="flex justify-center gap-0.5">
+                                                  <button onClick={() => startEditing(req)} className="text-slate-400 hover:text-emerald-600 p-1 hover:bg-emerald-50 rounded-full" title="Editar"><Pencil size={18} /></button>
                                                   <button 
-                                                      onClick={() => onReturnToPending?.(req.id)} 
-                                                      className="text-slate-400 hover:text-amber-600 p-1.5 hover:bg-amber-50 rounded-full transition-all flex items-center gap-1 group" 
-                                                      title="Revertir cierre y devolver a gestión original"
+                                                      onClick={() => onMarkCompleted?.(req.id)} 
+                                                      className="text-emerald-500 hover:text-emerald-700 p-1 hover:bg-emerald-50 rounded-full transition-all" 
+                                                      title="Marcar COMPLETADO"
                                                   >
-                                                      <RotateCcw size={18} className="group-hover:rotate-[-45deg] transition-transform" />
-                                                      <span className="text-[10px] font-bold uppercase hidden group-hover:inline">Revertir</span>
+                                                      <ClipboardCheck size={20} />
                                                   </button>
-                                              </div>
-                                          ) : isDeleting ? (
-                                              <div className="flex flex-col items-center gap-1">
-                                              <span className="text-[10px] font-bold text-red-600 uppercase">¿Revertir?</span>
-                                              <div className="flex gap-2">
-                                                  <button onClick={() => confirmReturn(req.id)} className="bg-red-600 text-white p-1 rounded-md"><CheckCircle size={14} /></button>
-                                                  <button onClick={() => setDeletingId(null)} className="bg-slate-200 text-slate-600 p-1 rounded-md"><X size={14} /></button>
-                                              </div>
-                                              </div>
-                                          ) : isEditing ? (
-                                              <div className="flex justify-center gap-2">
-                                              <button onClick={() => saveEditing(req.id)} className="text-emerald-600 p-1 hover:bg-emerald-100 rounded-full" title="Guardar"><Save size={18} /></button>
-                                              <button onClick={cancelEditing} className="text-slate-400 p-1 hover:bg-slate-200 rounded-full" title="Cancelar"><X size={18} /></button>
-                                              </div>
-                                          ) : (
-                                              <div className="flex justify-center gap-0.5">
-                                              <button onClick={() => startEditing(req)} className="text-slate-400 hover:text-emerald-600 p-1 hover:bg-emerald-50 rounded-full" title="Editar"><Pencil size={18} /></button>
-                                              <button 
-                                                  onClick={() => onMarkCompleted?.(req.id)} 
-                                                  className="text-emerald-500 hover:text-emerald-700 p-1 hover:bg-emerald-50 rounded-full transition-all" 
-                                                  title="Marcar COMPLETADO"
-                                              >
-                                                  <ClipboardCheck size={20} />
-                                              </button>
-                                              <button onClick={() => setDeletingId(req.id)} className="text-slate-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full" title="Borrar y volver a Pendiente"><Trash2 size={18} /></button>
-                                              <button onClick={() => onReturnToPending?.(req.id)} className="text-slate-400 hover:text-amber-600 p-1 hover:bg-amber-50 rounded-full" title="Devolver a pendientes"><Undo2 size={18} /></button>
-                                              </div>
-                                          )}
+                                                  <button onClick={() => setDeletingId(req.id)} className="text-slate-400 hover:text-red-600 p-1 hover:bg-red-50 rounded-full" title="Borrar y volver a Pendiente"><Trash2 size={18} /></button>
+                                                  <button onClick={() => onReturnToPending?.(req.id)} className="text-slate-400 hover:text-amber-600 p-1 hover:bg-amber-50 rounded-full" title="Devolver a pendientes"><Undo2 size={18} /></button>
+                                                  </div>
+                                              )
+                                          ) : null}
                                       </td>
                                     )}
                                 </tr>

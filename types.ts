@@ -15,6 +15,7 @@ export interface OwnDetails {
   hours: number;
   availabilityDate: string;
   equipo_id?: string;
+  estado_actual?: string;
 }
 
 export interface BuyDetails {
@@ -63,7 +64,7 @@ export interface EquipmentRequest {
   categoria?: Categoria;
 }
 
-export type ViewMode = 'DASHBOARD' | 'COMPLETED' | 'SETTINGS';
+export type ViewMode = 'DASHBOARD' | 'COMPLETED' | 'SETTINGS' | 'AVAILABLE_ASSETS';
 
 export enum UserRole {
   ADMIN = 'ADMIN',
