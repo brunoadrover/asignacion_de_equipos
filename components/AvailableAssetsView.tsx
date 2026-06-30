@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Package, CheckCircle, Info, MapPin, Calendar, Clock, FileDown, Trash2 } from 'lucide-react';
+import { Search, Package, CheckCircle, Info, MapPin, Calendar, Clock, FileDown, LogOut } from 'lucide-react';
 import { EquipmentRequest } from '../types';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -9,12 +9,14 @@ interface AvailableAssetsViewProps {
   requests: EquipmentRequest[];
   onRefresh?: () => void;
   onRetireEquipment?: (equipoId: string, asignacionId?: string, solicitudId?: string) => Promise<void>;
+  isGeyt?: boolean;
 }
 
 export const AvailableAssetsView: React.FC<AvailableAssetsViewProps> = ({ 
   requests, 
   onRefresh,
-  onRetireEquipment
+  onRetireEquipment,
+  isGeyt = false
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -178,13 +180,13 @@ export const AvailableAssetsView: React.FC<AvailableAssetsViewProps> = ({
                 <th className="px-6 py-4 font-semibold">Obra de Origen / Requerimiento</th>
                 <th className="px-6 py-4 font-semibold text-right">Horas</th>
                 <th className="px-6 py-4 font-semibold text-center">Estado</th>
-                <th className="px-6 py-4 font-semibold text-center">Acciones</th>
+                {isGeyt && <th className="px-6 py-4 font-semibold text-center">Acciones</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-sm">
               {filteredAssignments.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center text-slate-400">
+                  <td colSpan={isGeyt ? 6 : 5} className="px-6 py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Info size={28} className="opacity-40 text-slate-400" />
                       <p className="font-medium">No se encontraron activos a disposición</p>
@@ -232,23 +234,25 @@ export const AvailableAssetsView: React.FC<AvailableAssetsViewProps> = ({
                         Disponible
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-center">
-                      {req.ownDetails?.equipo_id ? (
-                        <button
-                          onClick={() => {
-                            if (window.confirm('¿Está seguro de que desea retirar este equipo? Se eliminará de la lista de activos a disposición.')) {
-                              onRetireEquipment?.(req.ownDetails?.equipo_id || '', req.id, req.solicitud_id);
-                            }
-                          }}
-                          className="inline-flex items-center gap-1 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all shadow-sm"
-                          title="Retirar equipo"
-                        >
-                          <Trash2 size={13} /> Retirar
-                        </button>
-                      ) : (
-                        <span className="text-xs text-slate-400 italic">No disponible</span>
-                      )}
-                    </td>
+                    {isGeyt && (
+                      <td className="px-6 py-4 text-center">
+                        {req.ownDetails?.equipo_id ? (
+                          <button
+                            onClick={() => {
+                              if (window.confirm('¿Está seguro de que desea retirar este equipo? Se eliminará de la lista de activos a disposición.')) {
+                                onRetireEquipment?.(req.ownDetails?.equipo_id || '', req.id, req.solicitud_id);
+                              }
+                            }}
+                            className="inline-flex items-center gap-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all shadow-sm"
+                            title="Retirar equipo"
+                          >
+                            <LogOut size={13} /> Retirar
+                          </button>
+                        ) : (
+                          <span className="text-xs text-slate-400 italic">No disponible</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))
               )}

@@ -973,6 +973,7 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                 requests={requests} 
                 onRefresh={fetchRequests}
                 onRetireEquipment={handleRetireEquipment}
+                isGeyt={currentUser?.rol === UserRole.ADMIN}
             />
           )}
 
