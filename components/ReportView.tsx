@@ -22,6 +22,7 @@ interface ReportViewProps {
   currentUser?: { rol: UserRole; uo_id?: string } | null;
   onReturnToPending?: (id: string) => void;
   onMarkCompleted?: (id: string) => void;
+  onMarkRentCompleted?: (req: EquipmentRequest) => void;
   onUpdateRequest?: (id: string, updates: Partial<EquipmentRequest>) => void;
   onDeleteRequest?: (id: string) => void;
 }
@@ -38,6 +39,7 @@ export const ReportView: React.FC<ReportViewProps> = ({
   currentUser,
   onReturnToPending,
   onMarkCompleted,
+  onMarkRentCompleted,
   onUpdateRequest,
   onDeleteRequest
 }) => {
@@ -319,7 +321,13 @@ export const ReportView: React.FC<ReportViewProps> = ({
                                                   <div className="flex justify-center gap-0.5">
                                                   <button onClick={() => startEditing(req)} className="text-slate-400 hover:text-emerald-600 p-1 hover:bg-emerald-50 rounded-full" title="Editar"><Pencil size={18} /></button>
                                                   <button 
-                                                      onClick={() => onMarkCompleted?.(req.id)} 
+                                                      onClick={() => {
+                                                          if (status === RequestStatus.RENT && onMarkRentCompleted) {
+                                                              onMarkRentCompleted(req);
+                                                          } else {
+                                                              onMarkCompleted?.(req.id);
+                                                          }
+                                                      }}
                                                       className="text-emerald-500 hover:text-emerald-700 p-1 hover:bg-emerald-50 rounded-full transition-all" 
                                                       title="Marcar COMPLETADO"
                                                   >

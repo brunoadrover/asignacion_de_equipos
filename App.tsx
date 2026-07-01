@@ -5,6 +5,7 @@ import { EquipmentRequest, RequestStatus, ViewMode, OwnDetails, BuyDetails, Unid
 import { AssignOwnModal } from './components/AssignOwnModal';
 import { AssignRentModal } from './components/AssignRentModal';
 import { AssignBuyModal } from './components/AssignBuyModal';
+import { CompleteRentModal } from './components/CompleteRentModal';
 import { ReportView } from './components/ReportView';
 import { SettingsView } from './components/SettingsView';
 import { LoginScreen } from './components/LoginScreen';
@@ -53,6 +54,9 @@ const App: React.FC = () => {
   const [selectedRequestForRent, setSelectedRequestForRent] = useState<EquipmentRequest | null>(null);
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
   const [selectedRequestForBuy, setSelectedRequestForBuy] = useState<EquipmentRequest | null>(null);
+
+  const [isCompleteRentModalOpen, setIsCompleteRentModalOpen] = useState(false);
+  const [selectedRequestForCompleteRent, setSelectedRequestForCompleteRent] = useState<EquipmentRequest | null>(null);
 
   useEffect(() => {
     fetchInitialData();
@@ -535,6 +539,65 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
       setIsRentModalOpen(false);
   };
 
+  const handleMarkRentCompleted = (req: EquipmentRequest) => {
+      setSelectedRequestForCompleteRent(req);
+      setIsCompleteRentModalOpen(true);
+  };
+
+  const confirmRentCompletion = async (data: {
+      nro_interno: string;
+      marca: string;
+      modelo: string;
+      horas_arrastre: number;
+      familia: string;
+  }) => {
+      if (!selectedRequestForCompleteRent) return;
+
+      try {
+          // 1. Insert new equipment into equipos with estado_actual = 'En Obra'
+          const { data: newEquip, error: equipError } = await supabase
+              .from('equipos')
+              .insert({
+                  nro_interno: data.nro_interno,
+                  marca: data.marca,
+                  modelo: data.modelo,
+                  horas_arrastre: data.horas_arrastre,
+                  familia: data.familia,
+                  estado_actual: 'En Obra'
+              })
+              .select()
+              .single();
+
+          if (equipError) throw equipError;
+          if (!newEquip) throw new Error("No se devolvió el equipo creado");
+
+          // 2. Associate the new equipment to the rental assignment
+          const { error: asigError } = await supabase
+              .from('asignaciones')
+              .update({ equipo_id: newEquip.id })
+              .eq('id', selectedRequestForCompleteRent.id);
+
+          if (asigError) throw asigError;
+
+          // 3. Mark the parent solicitud as COMPLETED
+          const solicitudId = selectedRequestForCompleteRent.solicitud_id || selectedRequestForCompleteRent.id;
+          const { error: solError } = await supabase
+              .from('solicitudes')
+              .update({ estado_general: 'COMPLETED' })
+              .eq('id', solicitudId);
+
+          if (solError) throw solError;
+
+          await fetchRequests();
+          await fetchEquipmentsList();
+          setIsCompleteRentModalOpen(false);
+      } catch (error: any) {
+          console.error("Error al completar alquiler:", error);
+          alert("Error al completar el alquiler: " + (error.message || error));
+          throw error;
+      }
+  };
+
   const initiateBuyAssignment = (req: EquipmentRequest) => { setSelectedRequestForBuy(req); setIsBuyModalOpen(true); };
   const confirmBuyAssignment = async (comments: string) => {
       if (!selectedRequestForBuy) return;
@@ -818,13 +881,12 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                                             <div className="space-y-1">
                                                 <div className="font-medium text-slate-800 flex items-center gap-2 flex-wrap">
                                                     <span>{req.description}</span>
-                                                    {req.categoria_nombre && (
+                                                    {req.capacity && (
                                                         <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded font-semibold border border-slate-200">
-                                                            Familia: {req.categoria_nombre}
+                                                            Familia: {req.capacity}
                                                         </span>
                                                     )}
                                                 </div>
-                                                <div className="text-[10px] text-slate-500 italic mt-0.5 border-t border-slate-100 pt-0.5 leading-tight">{req.capacity}</div>
                                             </div>
                                             )}
                                             
@@ -948,7 +1010,7 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
                   uos={uos} 
                   globalFilters={{ searchTerm, uoFilter }}
                   currentUser={currentUser}
-                  onMarkCompleted={handleMarkAsCompleted} 
+                  onMarkRentCompleted={handleMarkRentCompleted} 
                   onUpdateRequest={handleUpdateRequest} 
                   onDeleteRequest={handleDeleteRequest} 
                   onReturnToPending={handleRevertCompleted}
@@ -995,6 +1057,7 @@ Periodo de utilización: ${req.usagePeriod ? `${req.usagePeriod} meses` : '-'}
       <AssignOwnModal isOpen={isOwnModalOpen} onClose={() => setIsOwnModalOpen(false)} onConfirm={confirmOwnAssignment} request={selectedRequestForOwn} />
       <AssignRentModal isOpen={isRentModalOpen} onClose={() => setIsRentModalOpen(false)} onConfirm={confirmRentAssignment} request={selectedRequestForRent} />
       <AssignBuyModal isOpen={isBuyModalOpen} onClose={() => setIsBuyModalOpen(false)} onConfirm={confirmBuyAssignment} request={selectedRequestForBuy} />
+      <CompleteRentModal isOpen={isCompleteRentModalOpen} onClose={() => setIsCompleteRentModalOpen(false)} onConfirm={confirmRentCompletion} request={selectedRequestForCompleteRent} />
     </div>
   );
 };
